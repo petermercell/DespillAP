@@ -1,7 +1,7 @@
 /*
   apDespill Plugin for Nuke
   ------------------------------
-  Copyright (c) 2024 Gonzalo Rojas
+  Copyright (c) 2025 Gonzalo Rojas
   This plugin is free to use, modify, and distribute.
   Provided "as is" without any warranty.
 */
