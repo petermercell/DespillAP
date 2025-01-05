@@ -1,0 +1,269 @@
+//---------------------------------------------------------
+// apDespillKernel - apDespill v1.0 by Adrian Pueyo
+//
+// Despill an image, with options to despill any hue (and
+// not only the primaries), select different algorithms for
+// des/respilling, and protect tones from the despill.
+//
+// v2.0: Ability to plug image inputs for the controls,
+// and to perform a full key and respill.
+//
+// adrianpueyo.com, 2014-2017
+// ---------------------------------------------------------
+
+inline float y_convert_ccir601(const float4 in){
+  return in.x * 0.299f + in.y * 0.587f + in.z * 0.114f;
+}
+
+inline float y_convert_rec709(const float4 in){
+  return in.x * 0.2125f + in.y * 0.7154f + in.z * 0.0721f;
+}
+
+inline float y_convert_rec2020(const float4 in){
+  return in.x * 0.2627f + in.y * 0.678f + in.z * 0.0593f;
+}
+
+inline float4 hueRotate(const float4 in, const float H){
+  if(H==0.0f){
+    return in;
+  }else{
+    float cosH = cos(H*PI/180);
+    float sinH = sin(H*PI/180);
+    float3 ret;
+    ret.x = (in.x+in.y+in.z)*(1-cosH)/3 + in.x*cosH + (-in.y/sqrt(3.0f)+in.z/sqrt(3.0f))*sinH;
+    ret.y = (in.x+in.y+in.z)*(1-cosH)/3 + in.y*cosH + (in.x/sqrt(3.0f)-in.z/sqrt(3.0f))*sinH;
+    ret.z = (in.x+in.y+in.z)*(1-cosH)/3 + in.z*cosH + (-in.x/sqrt(3.0f)+in.y/sqrt(3.0f))*sinH;
+    return float4(ret.x,ret.y,ret.z,in[3]);
+  }
+}
+
+float3 vecToPlane(float3 v1, float3 v2 = float3(1.0f,1.0f,1.0f)){
+  float3 v1onv2;
+  v1onv2 = v2 * float((float(dot(v2,v1))/float(dot(v2,v2)))); //Projection of vector on another (plane's normal)
+  return v1-v1onv2; //Projection of vector on plane
+}
+
+inline float3 myCross(float3 a, float3 b){
+  return float3(float(a.y*b.z-a.z*b.y),float(a.z*b.x-a.x*b.z),float(a.x*b.y-a.y*b.x));
+}
+
+inline float colorAngle(const float3 v1, const float3 v2){
+  const float3 vN=float3(1.0f,1.0f,1.0f);
+  float ang = acos(float(dot(v1,v2))/float(sqrt(dot(v1,v1)*dot(v2,v2))));
+  float3 crs = myCross(v1,v2);
+  if (dot(vN, crs) > 0) {
+    ang = -ang;
+  }
+  return ang;
+}
+
+//Main function to calculate the despill for a float4 colour. If prot1_preview is True, returns the prot1 result instead.
+inline float4 apDespillMain(float4 src_color, float hueShift, int clr, int mode, float limit, float weights, int prot1_preview, int prot1_on, float3 prot1, float prot1_tolerance, float prot1_mult, float prot1_falloff){
+    //1. HueRotate IN
+    float4 despilled = hueRotate(src_color, hueShift);
+
+    //2. Calculate the limit
+    float resultLimit = 0.0f;
+    int2 others;
+    if(clr==0){//If red (and if _usePicked, also set red)
+      others = int2(1,2);
+    }else if(clr==1){
+      others=int2(0,2);
+    }else if(clr==2){
+      others=int2(0,1);
+    }
+
+    if(mode==0){//average
+      resultLimit = (despilled[others[0]]+despilled[others[1]])/2;
+    }else if(mode==1){//max
+      resultLimit = max(despilled[others[0]],despilled[others[1]]);
+    }else if(mode==2){//min
+      resultLimit = min(despilled[others[0]],despilled[others[1]]);
+    }else{//custom
+      resultLimit = despilled[others[0]]*weights+despilled[others[1]]*(1-weights);
+    }
+
+    //3. Protect tones
+    float prot1_result;
+    if(prot1_on==1&&(prot1[0]!=prot1[1]||prot1[0]!=prot1[2]||prot1[1]!=prot1[2])){
+      float cos_prot1_angle;
+      cos_prot1_angle = (src_color[0]*prot1[0]+src_color[1]*prot1[1]+src_color[2]*prot1[2]) / (sqrt(prot1[0]*prot1[0]+prot1[1]*prot1[1]+prot1[2]*prot1[2]) * sqrt(src_color[0]*src_color[0]+src_color[1]*src_color[1]+src_color[2]*src_color[2]));
+      prot1_result = pow(clamp(cos_prot1_angle,0.0f,1.0f),1/pow(prot1_tolerance,prot1_falloff));
+      resultLimit = resultLimit*(1+prot1_result*prot1_mult);
+    }
+
+    //4. Calculate the despill and HueRotate OUT
+    for (int component = 0; component < 3; component++){
+      despilled[component] = component==clr?min(despilled[component],resultLimit*limit):despilled[component];
+    }
+    despilled = hueRotate(despilled,-hueShift);
+    despilled[3] = prot1_result;
+    return despilled;
+}
+
+inline float getLuma(float4 src_color, int luma_math){
+  float luma;
+  if(luma_math==0){
+    luma = y_convert_rec709(src_color);
+  }else if(luma_math==1){
+    luma = y_convert_ccir601(src_color);
+  }else if(luma_math==2){
+    luma = y_convert_rec2020(src_color);    
+  }else if(luma_math==3){
+    luma = (src_color[0]+src_color[1]+src_color[2])/3;
+  }else{
+    luma = max(max(src_color[0],src_color[1]),src_color[2]);
+  }
+  return luma;
+}
+
+kernel apDespillKernel : ImageComputationKernel<ePixelWise>
+{
+  Image<eRead, eAccessPoint, eEdgeClamped> src;
+  Image<eRead, eAccessPoint, eEdgeClamped> color_src;
+  Image<eRead, eAccessPoint, eEdgeClamped> spill_src; //Acts as a multiplier for the respill color
+  Image<eWrite> dst;
+
+  param:
+    float limit;
+    float shift;
+    float weights;
+    int outmode;//0=despill,1=spill
+    int output_alpha;
+    int output_alpha_inverted;
+    int clr; //0=red,1=green,2=blue
+    int mode; //0=average,1=maximum,2=minimum,3=custom
+    int respill_math; //0=Rec709,1=Ccir601,2=Avg,3=Max
+    float4 respill_color;
+    int prot1_on;
+    int prot1_preview;
+    float3 prot1;
+    float prot1_tolerance;
+    float prot1_mult;
+    float prot1_falloff;
+    float3 pickSpill;
+    int despill_method; //0=despill,1=key/"absolute"
+
+    int use_color_input;
+    int use_spill_input;
+    int use_limit_input; //Should be shuffled in the src's alpha
+
+  local:
+    int _usePicked;
+    int _clr;
+    int _ret;
+    float _hueShift;
+    float _autoShift;
+    float3 despillColor;
+    float3 vNorm;
+
+  void define() {
+    defineParam(limit, "limit", 1.0f);
+    defineParam(shift, "shift", 0.0f);
+  }
+
+  void init() {
+    //1. Calculate which color to affect
+    _ret = 0;
+    if(use_color_input==1){
+      _clr = 0;
+      _usePicked = 1;
+    }else if(clr!=3){//red green or blue
+      _usePicked = 0;
+      _clr = clr;
+    }else if(pickSpill.x==pickSpill.y && pickSpill.x==pickSpill.z){
+      _ret = 1;//if "custom" selected but has a gray value, avoid any calculations
+    }else{
+      _usePicked = 1;
+      _clr = 0;
+    }
+    vNorm = float3(1.0f,1.0f,1.0f);
+    if(use_color_input==0){
+      //2. Calculate the necessary hue shift
+      _autoShift = 0.0f;
+      if(_usePicked==1){
+        _autoShift = colorAngle(vecToPlane(pickSpill,vNorm),vecToPlane(float3(1.0f,0.0f,0.0f),vNorm));
+        _autoShift = _autoShift*180/PI;//to deg
+      }
+      _hueShift = shift-_autoShift;
+    }
+  }
+
+  void process(){
+    if(_ret == 1){ dst()=src(); return; } //Avoid any calculations if no despill selected
+
+    //0. If color from input, calculate the necessary hue shift
+    float hueShift = 0.0f, autoShift = 0.0f;
+    float3 despillColor;
+    if(use_color_input==1){
+      despillColor = float3(color_src(0),color_src(1),color_src(2));
+      autoShift = colorAngle(vecToPlane(despillColor,vNorm),vecToPlane(float3(1.0f,0.0f,0.0f),vNorm));
+      autoShift = autoShift*180/PI;//to deg
+      hueShift = shift-autoShift;
+    }else{
+      if(_usePicked == 1){
+        despillColor = pickSpill;
+      }else{
+        despillColor = float3(_clr==0?1.0f:0.0f,_clr==1?1.0f:0.0f,_clr==2?1.0f:0.0f);
+      }
+      
+      hueShift = _hueShift;
+    }
+
+    float limit_result = use_limit_input==1?limit*src(3):limit;
+
+    //1. Despill the source image
+    float4 despilled = apDespillMain(src(), hueShift, _clr, mode, limit_result, weights, prot1_preview, prot1_on, prot1, prot1_tolerance, prot1_mult, prot1_falloff);
+    if(prot1_preview==1 && prot1_on==1){
+      dst() = src()*clamp(despilled[3]*prot1_mult,0.0f,1.0f);
+      return;
+    }
+    float4 spill = src()-despilled;
+    float spill_luma = getLuma(spill, respill_math);
+
+    //2. Process the key if key method selected
+    float4 result;
+    float4 despilled_full, spill_full; //Will account for the key if method selected is key
+    float spill_luma_full;
+    if(despill_method==0){
+      //Despill Method = Despill
+      despilled_full = despilled;
+      spill_full = spill;
+      spill_luma_full = spill_luma;
+    }else{
+      //Despill Method = Key
+      float4 despillColor4 = float4(despillColor.x,despillColor.y,despillColor.z,1.0f); //For simplicity
+
+      //2.1. Despill the picked despill colour itself, for normalizing the spill
+      float4 pickSpill_despilled = apDespillMain(despillColor4, hueShift, _clr, mode, limit_result, weights, prot1_preview, prot1_on, prot1, prot1_tolerance, prot1_mult, prot1_falloff);
+      float4 pickSpill_spill = despillColor4-pickSpill_despilled;
+      float pickSpill_spill_luma = getLuma(pickSpill_spill, respill_math);
+
+      spill_luma_full = pickSpill_spill_luma == 0? 0:spill_luma/pickSpill_spill_luma;
+      spill_full = despillColor4*spill_luma_full;
+      despilled_full = src()-spill_full;
+    }
+
+
+    float4 respill_color_result = use_spill_input==1?spill_src()*respill_color:respill_color;
+    //3. Output
+    if(outmode==0){ //Despill
+      result = despilled_full+spill_luma_full*respill_color_result;
+    }else{ //Spill
+      result = spill_full;
+    }
+
+    if(output_alpha==0){
+      result[3]=src(3);
+    }else{
+      if(output_alpha_inverted == 0){
+        result[3]=spill_luma_full;
+      }else{
+        result[3]=1-spill_luma_full;
+      }
+    }
+
+    dst() = result;
+
+  }
+};

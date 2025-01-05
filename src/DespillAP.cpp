@@ -115,6 +115,8 @@ void DespillAPIop::knobs(Knob_Callback f)
     Bool_knob(f, &d_outputAlpha, "outputAlpha", "Output Spill Alpha");
     ClearFlags(f, Knob::STARTLINE);
     Bool_knob(f, &d_invertAlpha, "invertAlpha", "Invert");
+    SetFlags(f, Knob::ENDLINE);
+    Spacer(f, 0);
 }
 
 int DespillAPIop::knob_changed(Knob *k)
@@ -194,7 +196,9 @@ const char *DespillAPIop::input_label(int n, char *) const
 
 void DespillAPIop::_validate(bool for_real)
 {
-    copy_info();
+    copy_info(0);
+    set_out_channels(Mask_RGBA);
+    info_.turn_on(Mask_RGBA);
 }
 
 void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, int count)
