@@ -59,26 +59,26 @@ public:
     const char *node_help() const { return HELP; }
 
 private:
-    bool d_imgBased;
-    bool d_absMode;
-    int d_colorType;
-    int d_outputType;
-    int d_despillMath;
-    int d_respillMath;
-    float d_spillPick;
-    float d_respillColor;
-    bool d_outputAlpha;
-    bool d_invertAlpha;
-    float d_customMath;
-    float d_hueOffset;
-    float d_hueLimit;
-    bool d_protectTones;
-    bool d_protectPrev;
-    float d_protectColor;
-    float d_protectTolerance;
-    float d_protectFalloff;
-    float d_protectEffect;
-    ChannelSet d_defaultChannels;
+    bool k_imgBased;
+    bool k_absMode;
+    int k_colorType;
+    int k_outputType;
+    int k_despillMath;
+    int k_respillMath;
+    float k_spillPick;
+    float k_respillColor;
+    bool k_outputAlpha;
+    bool k_invertAlpha;
+    float k_customMath;
+    float k_hueOffset;
+    float k_hueLimit;
+    bool k_protectTones;
+    bool k_protectPrev;
+    float k_protectColor;
+    float k_protectTolerance;
+    float k_protectFalloff;
+    float k_protectEffect;
+    ChannelSet k_defaultChannels;
 };
 
 #endif // DESPILL_AP_H

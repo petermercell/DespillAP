@@ -38,76 +38,76 @@ static const char *const _despillMathTypes[] = {
 
 DespillAPIop::DespillAPIop(Node *node) : Iop(node)
 {
-    d_defaultChannels = Mask_RGBA;
-    d_absMode = 0;
-    d_imgBased = 0;
-    d_colorType = 3;
-    d_spillPick = 0.0f;
-    d_respillColor = 1.0f;
-    d_outputType = 0;
-    d_outputAlpha = 1;
-    d_invertAlpha = 1;
-    d_despillMath = 0;
-    d_customMath = 0.0f;
-    d_hueOffset = 0.0f;
-    d_hueLimit = 1.0f;
-    d_respillMath = 0;
-    d_protectColor = 0.0f;
-    d_protectTolerance = 0.2f;
-    d_protectFalloff = 2.0f;
-    d_protectEffect = 1.0f;
+    k_defaultChannels = Mask_RGBA;
+    k_absMode = 0;
+    k_imgBased = 0;
+    k_colorType = 3;
+    k_spillPick = 0.0f;
+    k_respillColor = 1.0f;
+    k_outputType = 0;
+    k_outputAlpha = 1;
+    k_invertAlpha = 1;
+    k_despillMath = 0;
+    k_customMath = 0.0f;
+    k_hueOffset = 0.0f;
+    k_hueLimit = 1.0f;
+    k_respillMath = 0;
+    k_protectColor = 0.0f;
+    k_protectTolerance = 0.2f;
+    k_protectFalloff = 2.0f;
+    k_protectEffect = 1.0f;
 }
 
 void DespillAPIop::knobs(Knob_Callback f)
 {
-    Enumeration_knob(f, &d_colorType, _colorTypes, "color");
-    Bool_knob(f, &d_imgBased, "imageBased", "Image Based");
+    Enumeration_knob(f, &k_colorType, _colorTypes, "color");
+    Bool_knob(f, &k_imgBased, "imageBased", "Image Based");
     ClearFlags(f, Knob::STARTLINE);
-    Bool_knob(f, &d_absMode, "absoluteMode", "Absolute Mode");
+    Bool_knob(f, &k_absMode, "absoluteMode", "Absolute Mode");
 
-    Knob *pick_knob = Color_knob(f, &d_spillPick, "pick");
+    Knob *pick_knob = Color_knob(f, &k_spillPick, "pick");
     ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
     pick_knob->set_value(0.0f, 0);
     pick_knob->set_value(1.0f, 1);
     pick_knob->set_value(0.0f, 2);
 
-    Enumeration_knob(f, &d_despillMath, _despillMathTypes, "despillMath", "math");
-    Float_knob(f, &d_customMath, "customMath", "");
+    Enumeration_knob(f, &k_despillMath, _despillMathTypes, "despillMath", "math");
+    Float_knob(f, &k_customMath, "customMath", "");
     SetFlags(f, Knob::DISABLED);
     SetRange(f, -1, 1);
 
     Divider(f, "<b>Hue</b>");
-    Float_knob(f, &d_hueOffset, "hueOffset", "offset");
+    Float_knob(f, &k_hueOffset, "hueOffset", "offset");
     SetRange(f, -30, 30);
-    Float_knob(f, &d_hueLimit, "hueLimit", "limit");
+    Float_knob(f, &k_hueLimit, "hueLimit", "limit");
     SetRange(f, 0, 2);
     SetFlags(f, Knob::ENDLINE);
-    Bool_knob(f, &d_protectTones, "protectTones", "Protect Tones");
-    Bool_knob(f, &d_protectPrev, "protectPreview", "Preview");
+    Bool_knob(f, &k_protectTones, "protectTones", "Protect Tones");
+    Bool_knob(f, &k_protectPrev, "protectPreview", "Preview");
     ClearFlags(f, Knob::STARTLINE);
 
     BeginGroup(f, "Protect Tones");
     SetFlags(f, Knob::CLOSED);
-    Knob *protectColor_knob = Color_knob(f, &d_protectColor, "protectColor", "color");
+    Knob *protectColor_knob = Color_knob(f, &k_protectColor, "protectColor", "color");
     ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
     SetFlags(f, Knob::DISABLED);
     protectColor_knob->set_value(0.0f, 0);
     protectColor_knob->set_value(0.0f, 1);
     protectColor_knob->set_value(0.0f, 2);
-    Float_knob(f, &d_protectTolerance, "protectTolerance", "tolerance");
+    Float_knob(f, &k_protectTolerance, "protectTolerance", "tolerance");
     SetFlags(f, Knob::DISABLED);
     SetRange(f, 0, 1);
-    Float_knob(f, &d_protectFalloff, "protectFalloff", "falloff");
+    Float_knob(f, &k_protectFalloff, "protectFalloff", "falloff");
     SetFlags(f, Knob::DISABLED);
     SetRange(f, 0, 4);
-    Float_knob(f, &d_protectEffect, "protectEffect", "effect");
+    Float_knob(f, &k_protectEffect, "protectEffect", "effect");
     SetFlags(f, Knob::DISABLED);
     SetRange(f, 0, 10);
     EndGroup(f);
 
     Divider(f, "<b>Respill</b>");
-    Enumeration_knob(f, &d_respillMath, _respillMathTypes, "respillMath", "math");
-    Knob *respillColor_knob = Color_knob(f, &d_respillColor, "respillColor", "color");
+    Enumeration_knob(f, &k_respillMath, _respillMathTypes, "respillMath", "math");
+    Knob *respillColor_knob = Color_knob(f, &k_respillColor, "respillColor", "color");
     ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
     respillColor_knob->set_value(1.0f, 0);
     respillColor_knob->set_value(1.0f, 1);
@@ -115,10 +115,10 @@ void DespillAPIop::knobs(Knob_Callback f)
     SetRange(f, 0, 4);
 
     Divider(f, "<b>Output</b>");
-    Enumeration_knob(f, &d_outputType, _outputTypes, "outputDespill", "output");
-    Bool_knob(f, &d_outputAlpha, "outputAlpha", "Output Spill Alpha");
+    Enumeration_knob(f, &k_outputType, _outputTypes, "outputDespill", "output");
+    Bool_knob(f, &k_outputAlpha, "outputAlpha", "Output Spill Alpha");
     ClearFlags(f, Knob::STARTLINE);
-    Bool_knob(f, &d_invertAlpha, "invertAlpha", "Invert");
+    Bool_knob(f, &k_invertAlpha, "invertAlpha", "Invert");
     SetFlags(f, Knob::ENDLINE);
     Spacer(f, 0);
 }
@@ -201,8 +201,8 @@ const char *DespillAPIop::input_label(int n, char *) const
 void DespillAPIop::_validate(bool for_real)
 {
     copy_info(0);
-    set_out_channels(d_defaultChannels);
-    info_.turn_on(d_defaultChannels);
+    set_out_channels(k_defaultChannels);
+    info_.turn_on(k_defaultChannels);
 }
 
 void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, int count)
