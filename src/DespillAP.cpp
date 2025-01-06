@@ -6,7 +6,8 @@
   Provided "as is" without any warranty.
 */
 
-#include "DespillAP.h"
+#include "include/DespillAP.h"
+#include "include/Color.h"
 
 static const char *const _respillMathTypes[] = {
     "Rec 709",
@@ -44,8 +45,8 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
     d_spillPick = 0.0f;
     d_respillColor = 1.0f;
     d_outputType = 0;
-    d_outputAlpha = 0;
-    d_invertAlpha = 0;
+    d_outputAlpha = 1;
+    d_invertAlpha = 1;
     d_despillMath = 0;
     d_customMath = 0.0f;
     d_hueOffset = 0.0f;
@@ -65,6 +66,7 @@ void DespillAPIop::knobs(Knob_Callback f)
     Bool_knob(f, &d_absMode, "absoluteMode", "Absolute Mode");
 
     Knob *pick_knob = Color_knob(f, &d_spillPick, "pick");
+    ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
     pick_knob->set_value(0.0f, 0);
     pick_knob->set_value(1.0f, 1);
     pick_knob->set_value(0.0f, 2);
@@ -87,6 +89,7 @@ void DespillAPIop::knobs(Knob_Callback f)
     BeginGroup(f, "Protect Tones");
     SetFlags(f, Knob::CLOSED);
     Knob *protectColor_knob = Color_knob(f, &d_protectColor, "protectColor", "color");
+    ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
     SetFlags(f, Knob::DISABLED);
     protectColor_knob->set_value(0.0f, 0);
     protectColor_knob->set_value(0.0f, 1);
@@ -105,6 +108,7 @@ void DespillAPIop::knobs(Knob_Callback f)
     Divider(f, "<b>Respill</b>");
     Enumeration_knob(f, &d_respillMath, _respillMathTypes, "respillMath", "math");
     Knob *respillColor_knob = Color_knob(f, &d_respillColor, "respillColor", "color");
+    ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
     respillColor_knob->set_value(1.0f, 0);
     respillColor_knob->set_value(1.0f, 1);
     respillColor_knob->set_value(1.0f, 2);
@@ -197,8 +201,8 @@ const char *DespillAPIop::input_label(int n, char *) const
 void DespillAPIop::_validate(bool for_real)
 {
     copy_info(0);
-    set_out_channels(Mask_RGBA);
-    info_.turn_on(Mask_RGBA);
+    set_out_channels(d_defaultChannels);
+    info_.turn_on(d_defaultChannels);
 }
 
 void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, int count)

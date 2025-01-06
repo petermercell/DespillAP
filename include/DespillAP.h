@@ -6,6 +6,9 @@
   Provided "as is" without any warranty.
 */
 
+#ifndef DESPILL_AP_H
+#define DESPILL_AP_H
+
 #include "DDImage/Iop.h"
 #include "DDImage/NukeWrapper.h"
 using namespace DD::Image;
@@ -77,3 +80,5 @@ private:
     float d_protectEffect;
     ChannelSet d_defaultChannels;
 };
+
+#endif // DESPILL_AP_H
