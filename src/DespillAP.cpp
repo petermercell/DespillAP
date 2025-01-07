@@ -39,6 +39,7 @@ static const char *const _despillMathTypes[] = {
 DespillAPIop::DespillAPIop(Node *node) : Iop(node)
 {
     k_defaultChannels = Mask_RGBA;
+    k_limitChannel = Chan_Alpha;
     k_absMode = 0;
     k_imgBased = 0;
     k_colorType = 3;
@@ -81,9 +82,11 @@ void DespillAPIop::knobs(Knob_Callback f)
     SetRange(f, -30, 30);
     Float_knob(f, &k_hueLimit, "hueLimit", "limit");
     SetRange(f, 0, 2);
+    Input_Channel_knob(f, &k_limitChannel, 1, 1, "limitChannel", "channel"); // only if input limit is connected
     SetFlags(f, Knob::ENDLINE);
     Bool_knob(f, &k_protectTones, "protectTones", "Protect Tones");
     Bool_knob(f, &k_protectPrev, "protectPreview", "Preview");
+    SetFlags(f, Knob::DISABLED);
     ClearFlags(f, Knob::STARTLINE);
 
     BeginGroup(f, "Protect Tones");
@@ -162,12 +165,14 @@ int DespillAPIop::knob_changed(Knob *k)
         Knob *protectTolerance_knob = k->knob("protectTolerance");
         Knob *protectFalloff_knob = k->knob("protectFalloff");
         Knob *protectEffect_knob = k->knob("protectEffect");
+        Knob *protectPreview_knob = k->knob("protectPreview");
         if (protectTones_knob->get_value() == 1)
         {
             protectColor_knob->enable();
             protectTolerance_knob->enable();
             protectFalloff_knob->enable();
             protectEffect_knob->enable();
+            protectPreview_knob->enable();
         }
         else
         {
@@ -175,6 +180,7 @@ int DespillAPIop::knob_changed(Knob *k)
             protectTolerance_knob->disable();
             protectFalloff_knob->disable();
             protectEffect_knob->disable();
+            protectPreview_knob->disable();
         }
         return 1;
     }
@@ -196,6 +202,11 @@ const char *DespillAPIop::input_label(int n, char *) const
     default:
         return 0;
     }
+}
+
+void DespillAPIop::in_channels(int input, ChannelSet& mask) const
+{
+    mask += (k_limitChannel);
 }
 
 void DespillAPIop::_validate(bool for_real)

@@ -47,6 +47,7 @@ public:
     int knob_changed(Knob *k);
 
     void _validate(bool);
+    void in_channels(int input, ChannelSet& mask) const;
 
     void _request(int x, int y, int r, int t, ChannelMask channels, int count);
 
@@ -79,6 +80,7 @@ private:
     float k_protectFalloff;
     float k_protectEffect;
     ChannelSet k_defaultChannels;
+    Channel k_limitChannel;
 };
 
 #endif // DESPILL_AP_H
