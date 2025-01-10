@@ -8,37 +8,12 @@
 
 #include "include/DespillAP.h"
 #include "include/Color.h"
-
-static const char *const _respillMathTypes[] = {
-    "Rec 709",
-    "Ccir 601",
-    "Rec 2020",
-    "Average",
-    "Max",
-    0};
-
-static const char *const _colorTypes[] = {
-    "Red",
-    "Green",
-    "Blue",
-    "Pick",
-    0};
-
-static const char *const _outputTypes[] = {
-    "Despill",
-    "Spill",
-    0};
-
-static const char *const _despillMathTypes[] = {
-    "Average",
-    "Max",
-    "Min",
-    "Custom",
-    0};
+#include "include/Constants.h"
 
 DespillAPIop::DespillAPIop(Node *node) : Iop(node)
 {
     k_defaultChannels = Mask_RGBA;
+    k_input1ChannelSet = Mask_Alpha;
     k_limitChannel = Chan_Alpha;
     k_absMode = 0;
     k_imgBased = 0;
@@ -57,11 +32,15 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
     k_protectTolerance = 0.2f;
     k_protectFalloff = 2.0f;
     k_protectEffect = 1.0f;
+    k_invertLimitMask = 1;
+    k_useColorspace = 1;
+    k_colorspace_input = 0;
+    k_colorspace_log = 0;
 }
 
 void DespillAPIop::knobs(Knob_Callback f)
 {
-    Enumeration_knob(f, &k_colorType, _colorTypes, "color");
+    Enumeration_knob(f, &k_colorType, Constants::COLOR_TYPES, "color");
     Bool_knob(f, &k_imgBased, "imageBased", "Image Based");
     ClearFlags(f, Knob::STARTLINE);
     Bool_knob(f, &k_absMode, "absoluteMode", "Absolute Mode");
@@ -72,17 +51,24 @@ void DespillAPIop::knobs(Knob_Callback f)
     pick_knob->set_value(1.0f, 1);
     pick_knob->set_value(0.0f, 2);
 
-    Enumeration_knob(f, &k_despillMath, _despillMathTypes, "despillMath", "math");
+    Enumeration_knob(f, &k_despillMath, Constants::DESPILL_MATH_TYPES, "despillMath", "math");
     Float_knob(f, &k_customMath, "customMath", "");
     SetFlags(f, Knob::DISABLED);
     SetRange(f, -1, 1);
+
+    Divider(f, "<b>Colorspace</b>");
+    Bool_knob(f, &k_useColorspace, "useColorspace", "colorspace");
+    Bool_knob(f, &k_colorspace_input, "inputColorspace", "input colorspace");
+    Bool_knob(f, &k_colorspace_log, "useLogSpace", "log");
+    ClearFlags(f, Knob::STARTLINE);
 
     Divider(f, "<b>Hue</b>");
     Float_knob(f, &k_hueOffset, "hueOffset", "offset");
     SetRange(f, -30, 30);
     Float_knob(f, &k_hueLimit, "hueLimit", "limit");
     SetRange(f, 0, 2);
-    Input_Channel_knob(f, &k_limitChannel, 1, 1, "limitChannel", "channel"); // only if input limit is connected
+    Input_Channel_knob(f, &k_limitChannel, 1, 1, "limitChannel", "mask");
+    Bool_knob(f, &k_invertLimitMask, "invertLimitMask", "invert");
     SetFlags(f, Knob::ENDLINE);
     Bool_knob(f, &k_protectTones, "protectTones", "Protect Tones");
     Bool_knob(f, &k_protectPrev, "protectPreview", "Preview");
@@ -109,7 +95,7 @@ void DespillAPIop::knobs(Knob_Callback f)
     EndGroup(f);
 
     Divider(f, "<b>Respill</b>");
-    Enumeration_knob(f, &k_respillMath, _respillMathTypes, "respillMath", "math");
+    Enumeration_knob(f, &k_respillMath, Constants::RESPILL_MATH_TYPES, "respillMath", "math");
     Knob *respillColor_knob = Color_knob(f, &k_respillColor, "respillColor", "color");
     ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
     respillColor_knob->set_value(1.0f, 0);
@@ -118,7 +104,7 @@ void DespillAPIop::knobs(Knob_Callback f)
     SetRange(f, 0, 4);
 
     Divider(f, "<b>Output</b>");
-    Enumeration_knob(f, &k_outputType, _outputTypes, "outputDespill", "output");
+    Enumeration_knob(f, &k_outputType, Constants::OUTPUT_TYPES, "outputDespill", "output");
     Bool_knob(f, &k_outputAlpha, "outputAlpha", "Output Spill Alpha");
     ClearFlags(f, Knob::STARTLINE);
     Bool_knob(f, &k_invertAlpha, "invertAlpha", "Invert");
@@ -204,11 +190,6 @@ const char *DespillAPIop::input_label(int n, char *) const
     }
 }
 
-void DespillAPIop::in_channels(int input, ChannelSet& mask) const
-{
-    mask += (k_limitChannel);
-}
-
 void DespillAPIop::_validate(bool for_real)
 {
     copy_info(0);
@@ -218,7 +199,18 @@ void DespillAPIop::_validate(bool for_real)
 
 void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, int count)
 {
-    input(0)->request(x, y, r, t, channels, count);
+    // Source Input Channels
+    ChannelSet req_channels = channels;
+    req_channels += Mask_RGB;
+    input(0)->request(x, y, r, t, req_channels, count);
+
+    // Limit, Color and Respill inputs channels
+    for (int i = 1; i <=3; ++i) {
+        if (input(i) != nullptr) {
+            ChannelMask mask = (i == 1) ? Mask_Alpha : Mask_RGB;
+            input(i)->request(x, y, r, t, mask, count);
+        }
+    }
 }
 
 void DespillAPIop::engine(int y, int l, int r, ChannelMask channels, Row &out)
