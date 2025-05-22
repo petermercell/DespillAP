@@ -12,81 +12,93 @@
 #include "DDImage/Iop.h"
 #include "DDImage/NukeWrapper.h"
 using namespace DD::Image;
+#include "DDImage/Format.h"
+#include "DDImage/Knobs.h"
 #include "DDImage/Row.h"
 #include "DDImage/Tile.h"
-#include "DDImage/Knobs.h"
-#include "DDImage/Format.h"
+#include "include/Utils.h"
 
-#define HELP "DespillAP v1.0\n"                                                                                                                                                                               \
-             "\n"                                                                                                                                                                                             \
-             "DespillAP is a native Nuke node designed to remove color spill from images with precision and efficiency.\n"                                                                                    \
-             "\n"                                                                                                                                                                                             \
-             "Based on the algorithms and conceptual design of Adrian Pueyo's apDespill, DespillAP incorporates advanced features to provide both creative and technical control over the despill process.\n" \
-             "\n"                                                                                                                                                                                             \
-             "Despill Color knob : selects the color you want to remove from the image.\n"                                                                                                                    \
-             "Absolute Mode knob : performs a despill operation toward a specific color or emulates a key, similar to tools like Keylight.\n"                                                                 \
-             "Image Inputs       : allows connection of image inputs to define the despill color, respill color, or limits for a fully image-based despill workflow.\n"                                       \
-             "Tone Protection     : preserves key tones in the image during the despill process.\n"                                                                                                           \
-             "\n"                                                                                                                                                                                             \
-             "Tip: Default settings are optimized to avoid extra calculations, providing quick and effective results.\n"                                                                                      \
-             "\n"                                                                                                                                                                                             \
-             "Copyright 2025. Developed by Gonzalo Rojas.\n";
+#define HELP                                                                   \
+  "DespillAP v1.0\n"                                                           \
+  "\n"                                                                         \
+  "DespillAP is a native Nuke node designed to remove color spill from "       \
+  "images with precision and efficiency.\n"                                    \
+  "\n"                                                                         \
+  "Based on the algorithms and conceptual design of Adrian Pueyo's "           \
+  "apDespill, DespillAP incorporates advanced features to provide both "       \
+  "creative and technical control over the despill process.\n"                 \
+  "\n"                                                                         \
+  "Despill Color knob : selects the color you want to remove from the "        \
+  "image.\n"                                                                   \
+  "Absolute Mode knob : performs a despill operation toward a specific color " \
+  "or emulates a key, similar to tools like Keylight.\n"                       \
+  "Image Inputs       : allows connection of image inputs to define the "      \
+  "despill color, respill color, or limits for a fully image-based despill "   \
+  "workflow.\n"                                                                \
+  "Tone Protection     : preserves key tones in the image during the despill " \
+  "process.\n"                                                                 \
+  "\n"                                                                         \
+  "Tip: Default settings are optimized to avoid extra calculations, "          \
+  "providing quick and effective results.\n"                                   \
+  "\n"                                                                         \
+  "Copyright 2025. Developed by Gonzalo Rojas.\n";
 
 static const char *const CLASS = "DespillAP";
 
 class DespillAPIop : public Iop
 {
-public:
-    // constructor
-    DespillAPIop(Node *node);
+ public:
+  // constructor
+  DespillAPIop(Node *node);
 
-    int minimum_inputs() const { return 1; }
-    int maximum_inputs() const { return 4; }
+  int minimum_inputs() const { return 1; }
+  int maximum_inputs() const { return 4; }
 
-    void knobs(Knob_Callback f);
-    int knob_changed(Knob *k);
+  void knobs(Knob_Callback f);
+  int knob_changed(Knob *k);
 
-    void _validate(bool);
+  void _validate(bool);
 
-    void _request(int x, int y, int r, int t, ChannelMask channels, int count);
+  void _request(int x, int y, int r, int t, ChannelMask channels, int count);
 
-    void engine(int y, int l, int r, ChannelMask channels, Row &row);
+  void engine(int y, int l, int r, ChannelMask channels, Row &row);
 
-    const char *input_label(int n, char *) const;
-    static const Iop::Description d;
+  const char *input_label(int n, char *) const;
+  static const Iop::Description d;
 
-    const char *Class() const { return d.name; }
-    const char *node_help() const { return HELP; }
+  const char *Class() const { return d.name; }
+  const char *node_help() const { return HELP; }
 
-private:
-    bool k_imgBased;
-    bool k_absMode;
-    int k_colorType;
-    int k_outputType;
-    int k_despillMath;
-    int k_respillMath;
-    float k_spillPick;
-    float k_respillColor;
-    bool k_outputAlpha;
-    bool k_invertAlpha;
-    float k_customMath;
-    float k_hueOffset;
-    float k_hueLimit;
-    bool k_protectTones;
-    bool k_protectPrev;
-    float k_protectColor;
-    float k_protectTolerance;
-    float k_protectFalloff;
-    float k_protectEffect;
-    bool k_invertLimitMask;
-    bool k_useColorspace;
-    bool k_colorspace_input;
-    bool k_colorspace_log;
-    ChannelSet k_defaultChannels;
-    Channel k_limitChannel;
-    Knob* limitChannel_knob;
-    Knob* invertLimitMask_knob;
-    ChannelSet k_input1ChannelSet;
+ private:
+  bool k_imgBased;
+  bool k_absMode;
+  int k_colorType;
+  int k_outputType;
+  int k_despillMath;
+  int k_respillMath;
+  float k_spillPick;
+  float k_respillColor;
+  bool k_outputAlpha;
+  bool k_invertAlpha;
+  float k_customMath;
+  float k_hueOffset;
+  float k_hueLimit;
+  bool k_protectTones;
+  bool k_protectPrev;
+  float k_protectColor;
+  float k_protectTolerance;
+  float k_protectFalloff;
+  float k_protectEffect;
+  bool k_invertLimitMask;
+  Channel k_limitChannel;
+  Knob *limitChannel_knob;
+  Knob *invertLimitMask_knob;
+  ChannelSet k_input1ChannelSet;
+
+  imgcore::Bounds requestedBounds, formatBounds, fullFormatBounds;
+  float proxyScale_;
+
+  imgcore::Threader threader;
 };
 
-#endif // DESPILL_AP_H
+#endif  // DESPILL_AP_H

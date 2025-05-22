@@ -4,7 +4,14 @@ project(DespillAP)
 cmake_policy(SET CMP0074 NEW)
 
 # choose "Delete Cache and Reconfigure"
-set(Nuke_ROOT "C:/Program Files/Nuke12.1v2") # manual
+set(Nuke_ROOT "C:/Program Files/Nuke12.1v2") # manua
+
+#Output dir
+if(WIN32)
+    set(PLUGIN_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/output/Win")
+elseif(UNIX)
+    set(PLUGIN_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/output/Linux")
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include_directories(${CMAKE_SOURCE_DIR})
@@ -18,11 +25,6 @@ if (UNIX)
     add_compile_options(
         -DUSE_GLEW -fPIC -msse -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -mavx
     )
-endif()
-
-find_package(OpenGL)
-if (NOT OpenGL_FOUND)
-    message(WARNING "Couldn't find OpenGL")   
 endif()
 
 if (NUKE_VERSION_MAJOR VERSION_GREATER_EQUAL 15.0)
