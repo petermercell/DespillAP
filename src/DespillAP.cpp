@@ -28,7 +28,6 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
   k_limitChannel = Chan_Alpha;
   k_outputSpillChannel = Chan_Alpha;
   k_absMode = 0;
-  k_imgBased = 0;
   k_colorType = 3;
   k_spillPick = 0.0f;
   k_respillColor = 1.0f;
@@ -45,12 +44,16 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
   k_protectFalloff = 2.0f;
   k_protectEffect = 1.0f;
   k_invertLimitMask = 1;
+
+  isSourceConnected = false;
+  isLimitConnected = false;
+  isColorConnected = false;
+  isRespillConnected = false;
 }
 
 void DespillAPIop::knobs(Knob_Callback f)
 {
   Enumeration_knob(f, &k_colorType, Constants::COLOR_TYPES, "color");
-  Bool_knob(f, &k_imgBased, "imageBased", "Image Based");
   ClearFlags(f, Knob::STARTLINE);
   Bool_knob(f, &k_absMode, "absoluteMode", "Absolute Mode");
 
@@ -189,17 +192,30 @@ const char *DespillAPIop::input_label(int n, char *) const
 void DespillAPIop::set_input(int i, Op *inputOp, int input, int offset)
 {
   Iop::set_input(i, inputOp, input, offset);
+  bool isConnected = (inputOp && inputOp->node_name() != std::string("Black in root"));
 
-  if(inputOp) {
-    // Check if input color is connected
-    if(i == inputColor && inputOp->node_name() != "Black in root") {
-      std::cout << "connected! " << "\n";
-    }
-    else {
-      if(i == inputColor) {
-        std::cout << "not connected! " << "\n";
-      }
-    }
+  switch(i) {
+    case inputSource:
+      isSourceConnected = isConnected;
+      break;
+    case inputLimit:
+      isLimitConnected = isConnected;
+      break;
+    case inputColor:
+      isColorConnected = isConnected;
+      break;
+    case inputRespill:
+      isRespillConnected = isConnected;
+      break;
+  }
+
+  if(isColorConnected) {
+    knob("pick")->disable();
+    knob("color")->disable();
+  }
+  else {
+    knob("pick")->enable();
+    knob("color")->enable();
   }
 }
 

@@ -74,7 +74,6 @@ class DespillAPIop : public Iop
   const char *node_help() const { return HELP; }
 
  private:
-  bool k_imgBased;
   bool k_absMode;
   int k_colorType;
   int k_outputType;
@@ -98,6 +97,12 @@ class DespillAPIop : public Iop
   Channel k_outputSpillChannel;
   Knob *limitChannel_knob;
   Knob *invertLimitMask_knob;
+
+  // connected inputs
+  bool isSourceConnected;
+  bool isLimitConnected;
+  bool isColorConnected;
+  bool isRespillConnected;
 
   imgcore::Bounds requestedBounds, formatBounds, fullFormatBounds;
   float proxyScale_;
