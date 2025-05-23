@@ -23,8 +23,8 @@ enum inputs {
 
 DespillAPIop::DespillAPIop(Node *node) : Iop(node)
 {
-  k_input1ChannelSet = Mask_Alpha;
   k_limitChannel = Chan_Alpha;
+  k_outputSpillChannel = Chan_Alpha;
   k_absMode = 0;
   k_imgBased = 0;
   k_colorType = 3;
@@ -115,6 +115,9 @@ void DespillAPIop::knobs(Knob_Callback f)
   ClearFlags(f, Knob::STARTLINE);
   Bool_knob(f, &k_invertAlpha, "invertAlpha", "Invert");
   SetFlags(f, Knob::ENDLINE);
+  Input_Channel_knob(f, &k_outputSpillChannel, 1, 1, "outputSpillChannel",
+                     "channel");
+  SetFlags(f, Knob::ENDLINE);
   Spacer(f, 0);
 }
 
@@ -191,29 +194,21 @@ void DespillAPIop::_validate(bool for_real)
 {
   copy_info(0);
 
-  if(input(inputSource) != default_input(inputSource)) {
-    formatBounds = imgcore::BoxToBounds(input(0)->format());
-    fullFormatBounds = imgcore::BoxToBounds(input(0)->full_size_format());
-    proxyScale_ = static_cast<float>(formatBounds.GetWidth()) /
-                  static_cast<float>(fullFormatBounds.GetWidth());
-
-    ChannelSet add_channels = channels();
-    add_channels += Mask_RGBA;
-    set_out_channels(add_channels);
-    info_.turn_on(add_channels);
-
-    info_.black_outside(true);
-  }
-  else {
-    set_out_channels(Mask_None);
-  }
+  nuke::ChannelSet outChannels = channels();
+  outChannels += k_outputSpillChannel;
+  set_out_channels(outChannels);
+  info_.turn_on(outChannels);
 }
 
 void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels,
                             int count)
 {
+  nuke::ChannelSet requestedChannels = channels;
+  requestedChannels += Mask_RGB;
+
   input(inputSource)
-      ->request(input(inputSource)->info().box(), channels, Mask_RGB);
+      ->request(input(inputSource)->info().box(), requestedChannels, Mask_RGB);
+
   if(input(inputLimit) != nullptr) {
     input(inputLimit)->request(Mask_Alpha, count);
   };
@@ -225,17 +220,54 @@ void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels,
     input(inputRespill)
         ->request(input(inputRespill)->info().box(), Mask_RGB, count);
   };
-
-  requestedBounds.SetBounds(x, y, r - 1, t - 1);
 }
 
-void DespillAPIop::engine(int y, int l, int r, ChannelMask channels, Row &out)
+void DespillAPIop::engine(int y, int x, int r, ChannelMask channels, Row &row)
 {
-  foreach(z, channels) {
-    float *row = out.writable(z);
-    for(int x = l; x < r; x++) {
-      row[x] = 1.0f;
+  callCloseAfter(0);
+  ProcessCPU(y, x, r, channels, row);
+}
+
+void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels,
+                              Row &row)
+{
+  nuke::ChannelSet requestedChannels = channels;
+  requestedChannels += Mask_RGBA;  // Add RGBA
+  row.get(input0(), y, x, r, requestedChannels);
+
+  // Copy all other channels
+  nuke::ChannelSet copyMask = channels - nuke::Mask_RGBA;
+  row.pre_copy(row, copyMask);
+  row.copy(row, copyMask, x, r);
+
+  float rgb[3] = {0, 0, 0};
+  imgcore::Pixel<const float> inPixel(3);
+  imgcore::Pixel<float> outPixel(3);
+
+  for(int i = 0; i < 3; ++i) {
+    inPixel.SetPtr(row[static_cast<nuke::Channel>(i + 1)] + x, i);
+    outPixel.SetPtr(row.writable(static_cast<nuke::Channel>(i + 1)) + x, i);
+  }
+
+  // Loop through the pixels
+  for(int x0 = x; x0 < r; ++x0) {
+    for(int i = 0; i < 3; ++i) {
+      rgb[i] = inPixel.GetVal(i);
     }
+
+    // Write RGB channels
+    for(int i = 0; i < 3; i++) {
+      outPixel[i] = rgb[i];
+    }
+
+    // Write spill channel
+    foreach(z, channels) {
+      if(z == k_outputSpillChannel) {
+        *(row.writable(z) + x0) = 1.0f;
+      }
+    }
+    inPixel++;
+    outPixel++;
   }
 }
 

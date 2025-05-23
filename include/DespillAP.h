@@ -63,6 +63,8 @@ class DespillAPIop : public Iop
 
   void engine(int y, int l, int r, ChannelMask channels, Row &row);
 
+  void ProcessCPU(int y, int x, int r, ChannelMask channels, Row &row);
+
   const char *input_label(int n, char *) const;
   static const Iop::Description d;
 
@@ -91,9 +93,9 @@ class DespillAPIop : public Iop
   float k_protectEffect;
   bool k_invertLimitMask;
   Channel k_limitChannel;
+  Channel k_outputSpillChannel;
   Knob *limitChannel_knob;
   Knob *invertLimitMask_knob;
-  ChannelSet k_input1ChannelSet;
 
   imgcore::Bounds requestedBounds, formatBounds, fullFormatBounds;
   float proxyScale_;
