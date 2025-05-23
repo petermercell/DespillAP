@@ -9,24 +9,6 @@
 #include "include/Pixel.h"
 
 namespace nuke = DD::Image;
-
-/* inline float dot(const float a[3], const float b[3])
-{
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-inline void cross(const float (&a)[3], const float (&b)[3], float (&result)[3])
-{
-  result[0] = a[1] * b[2] - a[2] * b[1];
-  result[1] = a[2] * b[0] - a[0] * b[2];
-  result[2] = a[0] * b[1] - a[1] * b[0];
-}
-
-inline float clamp(float x, float minVal, float maxVal)
-{
-  return std::max(minVal, std::min(x, maxVal));
-}
- */
 namespace color
 {
   enum ScreenColor {
@@ -120,7 +102,6 @@ namespace color
 
   float ColorAngle(const float (&vec1)[3], const float (&vec2)[3])
   {
-    //const float normal[3] = {1.0f, 1.0f, 1.0f};
     Vector3 normal(1.0f, 1.0f, 1.0f);
     Vector3 v1(vec1);
     Vector3 v2(vec2);
@@ -130,9 +111,6 @@ namespace color
 
     float cosTheta = clamp(v1.dot(v2) / (mag1 * mag2), -1.0f, 1.0f);
     float angle = std::acosf(cosTheta);
-
-    //float crs[3];
-    // cross(vec1, vec2, crs);
 
     if(normal.dot(v1.cross(v2)) > 0.0f) {
       angle = -angle;
