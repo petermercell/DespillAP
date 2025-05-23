@@ -11,6 +11,7 @@
 #include "include/Attribute.h"
 #include "include/Color.h"
 #include "include/Constants.h"
+#include "include/Dispatcher.h"
 #include "include/Image.h"
 #include "include/Utils.h"
 
@@ -23,6 +24,7 @@ enum inputs {
 
 DespillAPIop::DespillAPIop(Node *node) : Iop(node)
 {
+  inputs(3);
   k_limitChannel = Chan_Alpha;
   k_outputSpillChannel = Chan_Alpha;
   k_absMode = 0;
@@ -58,8 +60,7 @@ void DespillAPIop::knobs(Knob_Callback f)
   pick_knob->set_value(1.0f, 1);
   pick_knob->set_value(0.0f, 2);
 
-  Enumeration_knob(f, &k_despillMath, Constants::DESPILL_MATH_TYPES,
-                   "despillMath", "math");
+  Enumeration_knob(f, &k_despillMath, Constants::DESPILL_MATH_TYPES, "despillMath", "math");
   Float_knob(f, &k_customMath, "customMath", "");
   SetFlags(f, Knob::DISABLED);
   SetRange(f, -1, 1);
@@ -79,8 +80,7 @@ void DespillAPIop::knobs(Knob_Callback f)
 
   BeginGroup(f, "Protect Tones");
   SetFlags(f, Knob::CLOSED);
-  Knob *protectColor_knob =
-      Color_knob(f, &k_protectColor, "protectColor", "color");
+  Knob *protectColor_knob = Color_knob(f, &k_protectColor, "protectColor", "color");
   ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
   SetFlags(f, Knob::DISABLED);
   protectColor_knob->set_value(0.0f, 0);
@@ -98,10 +98,8 @@ void DespillAPIop::knobs(Knob_Callback f)
   EndGroup(f);
 
   Divider(f, "<b>Respill</b>");
-  Enumeration_knob(f, &k_respillMath, Constants::RESPILL_MATH_TYPES,
-                   "respillMath", "math");
-  Knob *respillColor_knob =
-      Color_knob(f, &k_respillColor, "respillColor", "color");
+  Enumeration_knob(f, &k_respillMath, Constants::RESPILL_MATH_TYPES, "respillMath", "math");
+  Knob *respillColor_knob = Color_knob(f, &k_respillColor, "respillColor", "color");
   ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
   respillColor_knob->set_value(1.0f, 0);
   respillColor_knob->set_value(1.0f, 1);
@@ -109,14 +107,12 @@ void DespillAPIop::knobs(Knob_Callback f)
   SetRange(f, 0, 4);
 
   Divider(f, "<b>Output</b>");
-  Enumeration_knob(f, &k_outputType, Constants::OUTPUT_TYPES, "outputDespill",
-                   "output");
+  Enumeration_knob(f, &k_outputType, Constants::OUTPUT_TYPES, "outputDespill", "output");
   Bool_knob(f, &k_outputAlpha, "outputAlpha", "Output Spill Alpha");
   ClearFlags(f, Knob::STARTLINE);
   Bool_knob(f, &k_invertAlpha, "invertAlpha", "Invert");
   SetFlags(f, Knob::ENDLINE);
-  Input_Channel_knob(f, &k_outputSpillChannel, 1, 1, "outputSpillChannel",
-                     "channel");
+  Input_Channel_knob(f, &k_outputSpillChannel, 1, 1, "outputSpillChannel", "channel");
   SetFlags(f, Knob::ENDLINE);
   Spacer(f, 0);
 }
@@ -170,7 +166,7 @@ int DespillAPIop::knob_changed(Knob *k)
     }
     return 1;
   }
-  knob("tile_color")->set_value(0x8b8b8bff);
+  knob("tile_color")->set_value(0x8b8b8bff);  // node color
   return 0;
 }
 
@@ -190,6 +186,23 @@ const char *DespillAPIop::input_label(int n, char *) const
   }
 }
 
+void DespillAPIop::set_input(int i, Op *inputOp, int input, int offset)
+{
+  Iop::set_input(i, inputOp, input, offset);
+
+  if(inputOp) {
+    // Check if input color is connected
+    if(i == inputColor && inputOp->node_name() != "Black in root") {
+      std::cout << "connected! " << "\n";
+    }
+    else {
+      if(i == inputColor) {
+        std::cout << "not connected! " << "\n";
+      }
+    }
+  }
+}
+
 void DespillAPIop::_validate(bool for_real)
 {
   copy_info(0);
@@ -200,25 +213,21 @@ void DespillAPIop::_validate(bool for_real)
   info_.turn_on(outChannels);
 }
 
-void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels,
-                            int count)
+void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, int count)
 {
   nuke::ChannelSet requestedChannels = channels;
   requestedChannels += Mask_RGB;
 
-  input(inputSource)
-      ->request(input(inputSource)->info().box(), requestedChannels, Mask_RGB);
+  input(inputSource)->request(input(inputSource)->info().box(), requestedChannels, Mask_RGB);
 
   if(input(inputLimit) != nullptr) {
     input(inputLimit)->request(Mask_Alpha, count);
   };
   if(input(inputColor) != nullptr) {
-    input(inputColor)
-        ->request(input(inputColor)->info().box(), Mask_RGB, count);
+    input(inputColor)->request(input(inputColor)->info().box(), Mask_RGB, count);
   };
   if(input(inputRespill) != nullptr) {
-    input(inputRespill)
-        ->request(input(inputRespill)->info().box(), Mask_RGB, count);
+    input(inputRespill)->request(input(inputRespill)->info().box(), Mask_RGB, count);
   };
 }
 
@@ -228,8 +237,7 @@ void DespillAPIop::engine(int y, int x, int r, ChannelMask channels, Row &row)
   ProcessCPU(y, x, r, channels, row);
 }
 
-void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels,
-                              Row &row)
+void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &row)
 {
   nuke::ChannelSet requestedChannels = channels;
   requestedChannels += Mask_RGBA;  // Add RGBA
@@ -241,6 +249,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels,
   row.copy(row, copyMask, x, r);
 
   float rgb[3] = {0, 0, 0};
+  float spillLuma[3] = {0, 0, 0};
   imgcore::Pixel<const float> inPixel(3);
   imgcore::Pixel<float> outPixel(3);
 
@@ -251,11 +260,16 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels,
 
   // Loop through the pixels
   for(int x0 = x; x0 < r; ++x0) {
-    for(int i = 0; i < 3; ++i) {
+    for(int i = 0; i < 3; i++) {
       rgb[i] = inPixel.GetVal(i);
     }
 
-    // Write RGB channels
+    float spillMatte = 0.0f;
+
+    // Apply functions to rgb
+    color::HueRotate(rgb, rgb, k_hueOffset);
+
+    // Write RGB channels to the output
     for(int i = 0; i < 3; i++) {
       outPixel[i] = rgb[i];
     }
@@ -263,7 +277,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels,
     // Write spill channel
     foreach(z, channels) {
       if(z == k_outputSpillChannel) {
-        *(row.writable(z) + x0) = 1.0f;
+        *(row.writable(z) + x0) = spillMatte;
       }
     }
     inPixel++;

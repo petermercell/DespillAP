@@ -51,7 +51,7 @@ class DespillAPIop : public Iop
   // constructor
   DespillAPIop(Node *node);
 
-  int minimum_inputs() const { return 1; }
+  int minimum_inputs() const { return 4; }
   int maximum_inputs() const { return 4; }
 
   void knobs(Knob_Callback f);
@@ -66,6 +66,8 @@ class DespillAPIop : public Iop
   void ProcessCPU(int y, int x, int r, ChannelMask channels, Row &row);
 
   const char *input_label(int n, char *) const;
+  void set_input(int i, Op *op, int input, int offset);
+
   static const Iop::Description d;
 
   const char *Class() const { return d.name; }
