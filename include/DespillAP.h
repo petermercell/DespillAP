@@ -16,7 +16,9 @@ using namespace DD::Image;
 #include "DDImage/Knobs.h"
 #include "DDImage/Row.h"
 #include "DDImage/Tile.h"
+#include "DDImage/Vector3.h"
 #include "include/Utils.h"
+
 
 #define HELP                                                                   \
   "DespillAP v1.0\n"                                                           \

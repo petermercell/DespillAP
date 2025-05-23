@@ -1,323 +1,407 @@
 //---------------------------------------------------------
 // apDespillKernel - apDespill v1.0 by Adrian Pueyo
 //
-// Despill an image, with options to despill any hue (and
-// not only the primaries), select different algorithms for
-// des/respilling, and protect tones from the despill.
+// Plugin para eliminar "spill" (derrame de color) de imágenes
+// Permite despill de cualquier matiz (no solo primarios RGB)
+// Incluye diferentes algoritmos y protección de tonos
 //
-// v2.0: Ability to plug image inputs for the controls,
-// and to perform a full key and respill.
+// v2.0: Capacidad de usar inputs de imagen para controles
+// y realizar key completo con respill
 //
 // adrianpueyo.com, 2014-2017
 // ---------------------------------------------------------
 
+// === FUNCIONES DE CONVERSIÓN A LUMINANCIA ===
+
+// Convierte RGB a luminancia usando estándar CCIR 601 (TV estándar)
 inline float y_convert_ccir601(const float4 in)
 {
+  // Coeficientes CCIR 601: R=0.299, G=0.587, B=0.114
   return in.x * 0.299f + in.y * 0.587f + in.z * 0.114f;
 }
 
+// Convierte RGB a luminancia usando estándar Rec. 709 (HDTV)
 inline float y_convert_rec709(const float4 in)
 {
+  // Coeficientes Rec. 709: R=0.2125, G=0.7154, B=0.0721
   return in.x * 0.2125f + in.y * 0.7154f + in.z * 0.0721f;
 }
 
+// Convierte RGB a luminancia usando estándar Rec. 2020 (Ultra HD)
 inline float y_convert_rec2020(const float4 in)
 {
+  // Coeficientes Rec. 2020: R=0.2627, G=0.678, B=0.0593
   return in.x * 0.2627f + in.y * 0.678f + in.z * 0.0593f;
 }
 
+// === FUNCIÓN DE ROTACIÓN DE MATIZ ===
+
+// Rota el matiz de un color en el espacio RGB
 inline float4 hueRotate(const float4 in, const float H)
 {
+  // Si no hay rotación, devuelve el color original
   if(H == 0.0f) {
     return in;
   }
   else {
+    // Calcula seno y coseno del ángulo de rotación (convertido a radianes)
     float cosH = cos(H * PI / 180);
     float sinH = sin(H * PI / 180);
     float3 ret;
+
+    // Matriz de rotación de matiz aplicada a cada componente RGB
+    // Fórmula basada en rotación en el espacio de color YIQ
     ret.x = (in.x + in.y + in.z) * (1 - cosH) / 3 + in.x * cosH +
             (-in.y / sqrt(3.0f) + in.z / sqrt(3.0f)) * sinH;
     ret.y = (in.x + in.y + in.z) * (1 - cosH) / 3 + in.y * cosH +
             (in.x / sqrt(3.0f) - in.z / sqrt(3.0f)) * sinH;
     ret.z = (in.x + in.y + in.z) * (1 - cosH) / 3 + in.z * cosH +
             (-in.x / sqrt(3.0f) + in.y / sqrt(3.0f)) * sinH;
+
+    // Mantiene el canal alpha original
     return float4(ret.x, ret.y, ret.z, in[3]);
   }
 }
 
+// === FUNCIONES DE GEOMETRÍA VECTORIAL ===
+
+// Proyecta un vector v1 sobre un plano definido por el vector normal v2
 float3 vecToPlane(float3 v1, float3 v2 = float3(1.0f, 1.0f, 1.0f))
 {
   float3 v1onv2;
-  v1onv2 = v2 * float((float(dot(v2, v1)) /
-                       float(dot(v2, v2))));  //Projection of vector on another (plane's normal)
-  return v1 - v1onv2;                         //Projection of vector on plane
+  // Calcula la proyección de v1 sobre v2 (normal del plano)
+  v1onv2 = v2 * float((float(dot(v2, v1)) / float(dot(v2, v2))));
+  // Resta la proyección para obtener el vector en el plano
+  return v1 - v1onv2;
 }
 
+// Implementación personalizada del producto cruz (cross product)
 inline float3 myCross(float3 a, float3 b)
 {
+  // Fórmula estándar del producto cruz: a × b
   return float3(float(a.y * b.z - a.z * b.y), float(a.z * b.x - a.x * b.z),
                 float(a.x * b.y - a.y * b.x));
 }
 
+// Calcula el ángulo entre dos vectores de color en el plano RGB
 inline float colorAngle(const float3 v1, const float3 v2)
 {
-  const float3 vN = float3(1.0f, 1.0f, 1.0f);
+  const float3 vN = float3(1.0f, 1.0f, 1.0f);  // Vector normal de referencia
+
+  // Calcula el ángulo usando el producto punto
   float ang = acos(float(dot(v1, v2)) / float(sqrt(dot(v1, v1) * dot(v2, v2))));
+
+  // Usa el producto cruz para determinar la dirección del ángulo
   float3 crs = myCross(v1, v2);
   if(dot(vN, crs) > 0) {
-    ang = -ang;
+    ang = -ang;  // Invierte el signo según la orientación
   }
   return ang;
 }
 
-//Main function to calculate the despill for a float4 colour. If prot1_preview is True, returns the prot1 result instead.
+// === FUNCIÓN PRINCIPAL DE DESPILL ===
+
+// Función principal que calcula el despill para un color RGBA
 inline float4 apDespillMain(float4 src_color, float hueShift, int clr, int mode, float limit,
                             float weights, int prot1_preview, int prot1_on, float3 prot1,
                             float prot1_tolerance, float prot1_mult, float prot1_falloff)
 {
-  //1. HueRotate IN
+  // 1. Aplica rotación de matiz de entrada
   float4 despilled = hueRotate(src_color, hueShift);
 
-  //2. Calculate the limit
+  // 2. Calcula el límite para el despill
   float resultLimit = 0.0f;
-  int2 others;
-  if(clr == 0) {  //If red (and if _usePicked, also set red)
-    others = int2(1, 2);
+  int2 others;  // Índices de los otros dos canales de color
+
+  // Determina qué canales usar según el color seleccionado
+  if(clr == 0) {          // Si es rojo
+    others = int2(1, 2);  // Usa verde y azul
   }
-  else if(clr == 1) {
-    others = int2(0, 2);
+  else if(clr == 1) {     // Si es verde
+    others = int2(0, 2);  // Usa rojo y azul
   }
-  else if(clr == 2) {
-    others = int2(0, 1);
+  else if(clr == 2) {     // Si es azul
+    others = int2(0, 1);  // Usa rojo y verde
   }
 
-  if(mode == 0) {  //average
+  // Calcula el límite según el modo seleccionado
+  if(mode == 0) {  // Promedio de los otros dos canales
     resultLimit = (despilled[others[0]] + despilled[others[1]]) / 2;
   }
-  else if(mode == 1) {  //max
+  else if(mode == 1) {  // Máximo de los otros dos canales
     resultLimit = max(despilled[others[0]], despilled[others[1]]);
   }
-  else if(mode == 2) {  //min
+  else if(mode == 2) {  // Mínimo de los otros dos canales
     resultLimit = min(despilled[others[0]], despilled[others[1]]);
   }
-  else {  //custom
+  else {  // Mezcla personalizada usando weights
     resultLimit = despilled[others[0]] * weights + despilled[others[1]] * (1 - weights);
   }
 
-  //3. Protect tones
+  // 3. Aplica protección de tonos (tone protection)
   float prot1_result;
   if(prot1_on == 1 && (prot1[0] != prot1[1] || prot1[0] != prot1[2] || prot1[1] != prot1[2])) {
     float cos_prot1_angle;
+
+    // Calcula el coseno del ángulo entre el color fuente y el color protegido
     cos_prot1_angle =
         (src_color[0] * prot1[0] + src_color[1] * prot1[1] + src_color[2] * prot1[2]) /
         (sqrt(prot1[0] * prot1[0] + prot1[1] * prot1[1] + prot1[2] * prot1[2]) *
          sqrt(src_color[0] * src_color[0] + src_color[1] * src_color[1] +
               src_color[2] * src_color[2]));
+
+    // Aplica la función de falloff para suavizar la protección
     prot1_result = pow(clamp(cos_prot1_angle, 0.0f, 1.0f), 1 / pow(prot1_tolerance, prot1_falloff));
+
+    // Modifica el límite basado en la protección
     resultLimit = resultLimit * (1 + prot1_result * prot1_mult);
   }
 
-  //4. Calculate the despill and HueRotate OUT
+  // 4. Aplica el despill y la rotación de matiz de salida
   for(int component = 0; component < 3; component++) {
+    // Solo aplica el límite al canal de color seleccionado
     despilled[component] =
         component == clr ? min(despilled[component], resultLimit * limit) : despilled[component];
   }
+
+  // Revierte la rotación de matiz
   despilled = hueRotate(despilled, -hueShift);
+
+  // Guarda el resultado de protección en el canal alpha para preview
   despilled[3] = prot1_result;
   return despilled;
 }
 
+// === FUNCIÓN DE CÁLCULO DE LUMINANCIA ===
+
+// Calcula la luminancia usando diferentes métodos matemáticos
 inline float getLuma(float4 src_color, int luma_math)
 {
   float luma;
   if(luma_math == 0) {
-    luma = y_convert_rec709(src_color);
+    luma = y_convert_rec709(src_color);  // Rec. 709
   }
   else if(luma_math == 1) {
-    luma = y_convert_ccir601(src_color);
+    luma = y_convert_ccir601(src_color);  // CCIR 601
   }
   else if(luma_math == 2) {
-    luma = y_convert_rec2020(src_color);
+    luma = y_convert_rec2020(src_color);  // Rec. 2020
   }
   else if(luma_math == 3) {
-    luma = (src_color[0] + src_color[1] + src_color[2]) / 3;
+    luma = (src_color[0] + src_color[1] + src_color[2]) / 3;  // Promedio RGB
   }
   else {
-    luma = max(max(src_color[0], src_color[1]), src_color[2]);
+    luma = max(max(src_color[0], src_color[1]), src_color[2]);  // Máximo RGB
   }
   return luma;
 }
 
+// === KERNEL PRINCIPAL ===
+
 kernel apDespillKernel : ImageComputationKernel<ePixelWise>
 {
-  Image<eRead, eAccessPoint, eEdgeClamped> src;
-  Image<eRead, eAccessPoint, eEdgeClamped> color_src;
-  Image<eRead, eAccessPoint, eEdgeClamped> spill_src;  //Acts as a multiplier for the respill color
-  Image<eWrite> dst;
+  // === DEFINICIÓN DE IMÁGENES ===
+  Image<eRead, eAccessPoint, eEdgeClamped> src;        // Imagen fuente
+  Image<eRead, eAccessPoint, eEdgeClamped> color_src;  // Input opcional para color de despill
+  Image<eRead, eAccessPoint, eEdgeClamped> spill_src;  // Multiplicador para color de respill
+  Image<eWrite> dst;                                   // Imagen de salida
 
+  // === PARÁMETROS DE CONTROL ===
 param:
-  float limit;
-  float shift;
-  float weights;
-  int outmode;  //0=despill,1=spill
-  int output_alpha;
-  int output_alpha_inverted;
-  int clr;           //0=red,1=green,2=blue
-  int mode;          //0=average,1=maximum,2=minimum,3=custom
-  int respill_math;  //0=Rec709,1=Ccir601,2=Avg,3=Max
-  float4 respill_color;
-  int prot1_on;
-  int prot1_preview;
-  float3 prot1;
-  float prot1_tolerance;
-  float prot1_mult;
-  float prot1_falloff;
-  float3 pickSpill;
-  int despill_method;  //0=despill,1=key/"absolute"
+  float limit;                // Intensidad del despill (0-1)
+  float shift;                // Ajuste manual de matiz
+  float weights;              // Peso para mezcla personalizada
+  int outmode;                // Modo de salida: 0=despill, 1=solo spill
+  int output_alpha;           // Si generar alpha del spill
+  int output_alpha_inverted;  // Si invertir el alpha del spill
+  int clr;                    // Color objetivo: 0=rojo, 1=verde, 2=azul, 3=personalizado
+  int mode;                   // Algoritmo: 0=promedio, 1=máximo, 2=mínimo, 3=personalizado
+  int respill_math;           // Método de luminancia para respill
+  float4 respill_color;       // Color de reemplazo (respill)
 
-  int use_color_input;
-  int use_spill_input;
-  int use_limit_input;  //Should be shuffled in the src's alpha
+  // Parámetros de protección de tonos
+  int prot1_on;           // Activar protección
+  int prot1_preview;      // Mostrar solo la máscara de protección
+  float3 prot1;           // Color a proteger
+  float prot1_tolerance;  // Tolerancia de la protección
+  float prot1_mult;       // Multiplicador de protección
+  float prot1_falloff;    // Suavizado de la protección
 
+  float3 pickSpill;    // Color personalizado de spill
+  int despill_method;  // 0=despill normal, 1=key absoluto
+
+  // Flags para usar inputs opcionales
+  int use_color_input;  // Usar input de color
+  int use_spill_input;  // Usar input de spill
+  int use_limit_input;  // Usar alpha de src como límite
+
+  // === VARIABLES LOCALES ===
 local:
-  int _usePicked;
-  int _clr;
-  int _ret;
-  float _hueShift;
-  float _autoShift;
-  float3 despillColor;
-  float3 vNorm;
+  int _usePicked;       // Flag: usar color personalizado
+  int _clr;             // Canal de color procesado
+  int _ret;             // Flag: evitar procesamiento
+  float _hueShift;      // Rotación de matiz calculada
+  float _autoShift;     // Rotación automática basada en color
+  float3 despillColor;  // Color de despill final
+  float3 vNorm;         // Vector normal de referencia
 
+  // === DEFINICIÓN DE PARÁMETROS ===
   void define()
   {
-    defineParam(limit, "limit", 1.0f);
-    defineParam(shift, "shift", 0.0f);
+    defineParam(limit, "limit", 1.0f);  // Valor por defecto del límite
+    defineParam(shift, "shift", 0.0f);  // Valor por defecto del shift
   }
 
+  // === INICIALIZACIÓN ===
   void init()
   {
-    //1. Calculate which color to affect
-    _ret = 0;
+    // 1. Determina qué color procesar
+    _ret = 0;  // Por defecto, procesar
+
     if(use_color_input == 1) {
-      _clr = 0;
+      // Usar input de imagen para el color
+      _clr = 0;  // Procesar como rojo (se rotará después)
       _usePicked = 1;
     }
-    else if(clr != 3) {  //red green or blue
+    else if(clr != 3) {
+      // Usar color primario (rojo, verde o azul)
       _usePicked = 0;
       _clr = clr;
     }
     else if(pickSpill.x == pickSpill.y && pickSpill.x == pickSpill.z) {
-      _ret = 1;  //if "custom" selected but has a gray value, avoid any calculations
+      // Color personalizado es gris - evitar procesamiento
+      _ret = 1;
     }
     else {
+      // Usar color personalizado
       _usePicked = 1;
-      _clr = 0;
+      _clr = 0;  // Procesar como rojo (se rotará después)
     }
-    vNorm = float3(1.0f, 1.0f, 1.0f);
+
+    vNorm = float3(1.0f, 1.0f, 1.0f);  // Vector normal de referencia
+
     if(use_color_input == 0) {
-      //2. Calculate the necessary hue shift
+      // 2. Calcula la rotación de matiz necesaria
       _autoShift = 0.0f;
       if(_usePicked == 1) {
+        // Calcula ángulo entre color personalizado y rojo
         _autoShift =
             colorAngle(vecToPlane(pickSpill, vNorm), vecToPlane(float3(1.0f, 0.0f, 0.0f), vNorm));
-        _autoShift = _autoShift * 180 / PI;  //to deg
+        _autoShift = _autoShift * 180 / PI;  // Convierte a grados
       }
-      _hueShift = shift - _autoShift;
+      _hueShift = shift - _autoShift;  // Shift total = manual - automático
     }
   }
 
+  // === PROCESAMIENTO PRINCIPAL ===
   void process()
   {
+    // Evita cálculos si no hay despill seleccionado
     if(_ret == 1) {
-      dst() = src();
+      dst() = src();  // Copia directa de entrada a salida
       return;
-    }  //Avoid any calculations if no despill selected
+    }
 
-    //0. If color from input, calculate the necessary hue shift
+    // 0. Si usa input de color, calcula el shift necesario
     float hueShift = 0.0f, autoShift = 0.0f;
     float3 despillColor;
+
     if(use_color_input == 1) {
+      // Lee el color del input de imagen
       despillColor = float3(color_src(0), color_src(1), color_src(2));
+
+      // Calcula el ángulo respecto al rojo
       autoShift =
           colorAngle(vecToPlane(despillColor, vNorm), vecToPlane(float3(1.0f, 0.0f, 0.0f), vNorm));
-      autoShift = autoShift * 180 / PI;  //to deg
+      autoShift = autoShift * 180 / PI;
       hueShift = shift - autoShift;
     }
     else {
       if(_usePicked == 1) {
-        despillColor = pickSpill;
+        despillColor = pickSpill;  // Color personalizado
       }
       else {
+        // Color primario: genera vector con 1 en el canal seleccionado
         despillColor =
             float3(_clr == 0 ? 1.0f : 0.0f, _clr == 1 ? 1.0f : 0.0f, _clr == 2 ? 1.0f : 0.0f);
       }
-
-      hueShift = _hueShift;
+      hueShift = _hueShift;  // Usa el shift precalculado
     }
 
+    // Aplica límite desde input si está habilitado (usa alpha de src)
     float limit_result = use_limit_input == 1 ? limit * src(3) : limit;
 
-    //1. Despill the source image
+    // 1. Aplica despill a la imagen fuente
     float4 despilled =
         apDespillMain(src(), hueShift, _clr, mode, limit_result, weights, prot1_preview, prot1_on,
                       prot1, prot1_tolerance, prot1_mult, prot1_falloff);
+
+    // Si está en modo preview de protección, muestra solo eso
     if(prot1_preview == 1 && prot1_on == 1) {
       dst() = src() * clamp(despilled[3] * prot1_mult, 0.0f, 1.0f);
       return;
     }
+
+    // Calcula el spill (diferencia entre original y despilled)
     float4 spill = src() - despilled;
     float spill_luma = getLuma(spill, respill_math);
 
-    //2. Process the key if key method selected
+    // 2. Procesa el key si está seleccionado el método key
     float4 result;
-    float4 despilled_full,
-        spill_full;  //Will account for the key if method selected is key
+    float4 despilled_full, spill_full;
     float spill_luma_full;
+
     if(despill_method == 0) {
-      //Despill Method = Despill
+      // Método normal: usar resultado directo
       despilled_full = despilled;
       spill_full = spill;
       spill_luma_full = spill_luma;
     }
     else {
-      //Despill Method = Key
-      float4 despillColor4 =
-          float4(despillColor.x, despillColor.y, despillColor.z, 1.0f);  //For simplicity
+      // Método key: normalizar contra el color de despill puro
+      float4 despillColor4 = float4(despillColor.x, despillColor.y, despillColor.z, 1.0f);
 
-      //2.1. Despill the picked despill colour itself, for normalizing the spill
+      // 2.1. Aplica despill al color de despill mismo para normalización
       float4 pickSpill_despilled =
           apDespillMain(despillColor4, hueShift, _clr, mode, limit_result, weights, prot1_preview,
                         prot1_on, prot1, prot1_tolerance, prot1_mult, prot1_falloff);
       float4 pickSpill_spill = despillColor4 - pickSpill_despilled;
       float pickSpill_spill_luma = getLuma(pickSpill_spill, respill_math);
 
+      // Normaliza el spill contra el spill del color puro
       spill_luma_full = pickSpill_spill_luma == 0 ? 0 : spill_luma / pickSpill_spill_luma;
       spill_full = despillColor4 * spill_luma_full;
       despilled_full = src() - spill_full;
     }
 
+    // Calcula el color de respill final
     float4 respill_color_result =
         use_spill_input == 1 ? spill_src() * respill_color : respill_color;
-    //3. Output
-    if(outmode == 0) {  //Despill
+
+    // 3. Genera la salida según el modo
+    if(outmode == 0) {
+      // Modo despill: imagen despilled + respill coloreado
       result = despilled_full + spill_luma_full * respill_color_result;
     }
-    else {  //Spill
+    else {
+      // Modo spill: solo el spill extraído
       result = spill_full;
     }
 
+    // Maneja el canal alpha de salida
     if(output_alpha == 0) {
-      result[3] = src(3);
+      result[3] = src(3);  // Mantiene alpha original
     }
     else {
       if(output_alpha_inverted == 0) {
-        result[3] = spill_luma_full;
+        result[3] = spill_luma_full;  // Alpha = intensidad del spill
       }
       else {
-        result[3] = 1 - spill_luma_full;
+        result[3] = 1 - spill_luma_full;  // Alpha = inverso del spill
       }
     }
 
+    // Escribe el resultado final
     dst() = result;
   }
 };

@@ -283,7 +283,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     float spillMatte = 0.0f;
 
     // Apply functions to rgb
-    color::HueRotate(rgb, rgb, k_hueOffset);
+    Vector3 hue = color::HueRotate(rgb, k_hueOffset);
 
     // Write RGB channels to the output
     for(int i = 0; i < 3; i++) {
