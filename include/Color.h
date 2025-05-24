@@ -59,33 +59,30 @@ namespace color
     }
   }  // namespace luma
 
-  Vector3 HueRotate(const float (&rgb)[3], const float &angle)
+  Vector3 HueRotate(const Vector3 rgb, const float &angle)
   {
-    Vector3 vec(rgb);
     Vector3 hue;
 
     if(angle == 0.0f) {
-      return;
+      return rgb;
     }
 
     float cosA = std::cosf(angle * M_PI_F / 180.0f);
     float sinA = std::sinf(angle * M_PI_F / 180.0f);
     float sqrt3 = std::sqrtf(3.0f);
-    float common = (vec.x + vec.y + vec.z) * (1.0f - cosA) / 3.0f;
+    float common = (rgb.x + rgb.y + rgb.z) * (1.0f - cosA) / 3.0f;
 
-    hue[0] = common + vec.x * cosA + (-vec.y / sqrt3 + vec.z / sqrt3) * sinA;
-    hue[1] = common + vec.y * cosA + (vec.x / sqrt3 - vec.z / sqrt3) * sinA;
-    hue[2] = common + vec.z * cosA + (-vec.x / sqrt3 + vec.y / sqrt3) * sinA;
+    hue[0] = common + rgb.x * cosA + (-rgb.y / sqrt3 + rgb.z / sqrt3) * sinA;
+    hue[1] = common + rgb.y * cosA + (rgb.x / sqrt3 - rgb.z / sqrt3) * sinA;
+    hue[2] = common + rgb.z * cosA + (-rgb.x / sqrt3 + rgb.y / sqrt3) * sinA;
 
     return hue;
   }
 
-  Vector3 VectorToPlane(const float (&vec1)[3], const float (&vec2)[3])
+  Vector3 VectorToPlane(const Vector3 v1, const Vector3 v2)
   {
     Vector3 ret;
     Vector3 proj;
-    Vector3 v1(vec1);
-    Vector3 v2(vec2);
 
     float scale = v1.dot(v2) / v2.dot(v1);
 
@@ -100,11 +97,9 @@ namespace color
     return ret;
   }
 
-  float ColorAngle(const float (&vec1)[3], const float (&vec2)[3])
+  float ColorAngle(const Vector3 v1, const Vector3 v2)
   {
     Vector3 normal(1.0f, 1.0f, 1.0f);
-    Vector3 v1(vec1);
-    Vector3 v2(vec2);
 
     float mag1 = std::sqrtf(v1.dot(v1));
     float mag2 = std::sqrtf(v2.dot(v2));

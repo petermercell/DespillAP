@@ -27,9 +27,11 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
   inputs(3);
   k_limitChannel = Chan_Alpha;
   k_outputSpillChannel = Chan_Alpha;
-  k_absMode = 0;
+  k_spillPick[0] = 0.0f;
+  k_spillPick[1] = 1.0f;
+  k_spillPick[2] = 0.0f;
   k_colorType = 3;
-  k_spillPick = 0.0f;
+  k_absMode = 0;
   k_respillColor = 1.0f;
   k_outputType = 0;
   k_outputAlpha = 1;
@@ -49,6 +51,8 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
   isLimitConnected = false;
   isColorConnected = false;
   isRespillConnected = false;
+
+  _returnColor = 0;
 }
 
 void DespillAPIop::knobs(Knob_Callback f)
@@ -57,11 +61,8 @@ void DespillAPIop::knobs(Knob_Callback f)
   ClearFlags(f, Knob::STARTLINE);
   Bool_knob(f, &k_absMode, "absoluteMode", "Absolute Mode");
 
-  Knob *pick_knob = Color_knob(f, &k_spillPick, "pick");
+  Knob *pick_knob = Color_knob(f, k_spillPick, "pick");
   ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
-  pick_knob->set_value(0.0f, 0);
-  pick_knob->set_value(1.0f, 1);
-  pick_knob->set_value(0.0f, 2);
 
   Enumeration_knob(f, &k_despillMath, Constants::DESPILL_MATH_TYPES, "despillMath", "math");
   Float_knob(f, &k_customMath, "customMath", "");
@@ -123,8 +124,8 @@ void DespillAPIop::knobs(Knob_Callback f)
 int DespillAPIop::knob_changed(Knob *k)
 {
   if(k->is("despillMath")) {
-    Knob *despillMath_knob = k->knob("despillMath");
-    Knob *customMath_knob = k->knob("customMath");
+    Knob *despillMath_knob = knob("despillMath");
+    Knob *customMath_knob = knob("customMath");
     if(despillMath_knob->get_value() == 3) {
       customMath_knob->enable();
     }
@@ -135,8 +136,8 @@ int DespillAPIop::knob_changed(Knob *k)
   }
 
   if(k->is("color")) {
-    Knob *color_knob = k->knob("color");
-    Knob *pick_knob = k->knob("pick");
+    Knob *color_knob = knob("color");
+    Knob *pick_knob = knob("pick");
     if(color_knob->get_value() == 3) {
       pick_knob->enable();
     }
@@ -147,12 +148,12 @@ int DespillAPIop::knob_changed(Knob *k)
   }
 
   if(k->is("protectTones")) {
-    Knob *protectTones_knob = k->knob("protectTones");
-    Knob *protectColor_knob = k->knob("protectColor");
-    Knob *protectTolerance_knob = k->knob("protectTolerance");
-    Knob *protectFalloff_knob = k->knob("protectFalloff");
-    Knob *protectEffect_knob = k->knob("protectEffect");
-    Knob *protectPreview_knob = k->knob("protectPreview");
+    Knob *protectTones_knob = knob("protectTones");
+    Knob *protectColor_knob = knob("protectColor");
+    Knob *protectTolerance_knob = knob("protectTolerance");
+    Knob *protectFalloff_knob = knob("protectFalloff");
+    Knob *protectEffect_knob = knob("protectEffect");
+    Knob *protectPreview_knob = knob("protectPreview");
     if(protectTones_knob->get_value() == 1) {
       protectColor_knob->enable();
       protectTolerance_knob->enable();
@@ -227,6 +228,37 @@ void DespillAPIop::_validate(bool for_real)
   outChannels += k_outputSpillChannel;
   set_out_channels(outChannels);
   info_.turn_on(outChannels);
+
+  normVec = Vector3(1.0f, 1.0f, 1.0f);
+
+  Vector3 pickSpill(k_spillPick);
+
+  if(isColorConnected) {
+    _clr = 0;
+    _usePickedColor = 1;
+  }
+  else if(k_colorType != Constants::COLOR_PICK) {
+    _usePickedColor = 0;
+    _clr = k_colorType;
+  }
+  else if(pickSpill.x == pickSpill.y && pickSpill.x == pickSpill.z) {
+    _returnColor = 1;
+  }
+  else {
+    _usePickedColor = 1;
+    _clr = 0;
+  }
+
+  if(!isColorConnected) {
+    float _autoShift = 0.0f;
+    if(_usePickedColor == 1) {
+      Vector3 v1 = color::VectorToPlane(k_spillPick, normVec);
+      Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f), normVec);
+      _autoShift = color::ColorAngle(v1, v2);
+      _autoShift = _autoShift * 180.0f / M_PI_F;
+    }
+    _hueShift = k_hueOffset - _autoShift;
+  }
 }
 
 void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, int count)
@@ -237,7 +269,7 @@ void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, in
   input(inputSource)->request(input(inputSource)->info().box(), requestedChannels, Mask_RGB);
 
   if(input(inputLimit) != nullptr) {
-    input(inputLimit)->request(Mask_Alpha, count);
+    input(inputLimit)->request(Mask_All, count);
   };
   if(input(inputColor) != nullptr) {
     input(inputColor)->request(input(inputColor)->info().box(), Mask_RGB, count);
@@ -264,13 +296,32 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
   row.pre_copy(row, copyMask);
   row.copy(row, copyMask, x, r);
 
+  // Get input color row
+  Row color_row(x, r);
+  if(input(inputColor) != nullptr) {
+    color_row.get(*input(inputColor), y, x, r, Mask_RGB);
+  }
+
+  // Get input limit channel
+  Row limit_matte_row(x, r);
+  const float *limitPtr;
+  if(input(inputLimit) != nullptr) {
+    limit_matte_row.get(*input(inputLimit), y, x, r, Mask_All);
+  }
+  if(input(inputLimit) != nullptr) {
+    limitPtr = limit_matte_row[k_limitChannel] + x;
+  }
+
   float rgb[3] = {0, 0, 0};
+  float colorRgb[3] = {0, 0, 0};
   float spillLuma[3] = {0, 0, 0};
+  imgcore::Pixel<const float> colorPixel(3);
   imgcore::Pixel<const float> inPixel(3);
   imgcore::Pixel<float> outPixel(3);
 
   for(int i = 0; i < 3; ++i) {
     inPixel.SetPtr(row[static_cast<nuke::Channel>(i + 1)] + x, i);
+    colorPixel.SetPtr(color_row[static_cast<nuke::Channel>(i + 1)] + x, i);
     outPixel.SetPtr(row.writable(static_cast<nuke::Channel>(i + 1)) + x, i);
   }
 
@@ -278,12 +329,48 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
   for(int x0 = x; x0 < r; ++x0) {
     for(int i = 0; i < 3; i++) {
       rgb[i] = inPixel.GetVal(i);
+      colorRgb[i] = colorPixel.GetVal(i);
+    }
+
+    if(_returnColor == 1) {
+      continue;
     }
 
     float spillMatte = 0.0f;
+    float hueShift = 0.0f;
+    float autoShift = 0.0f;
+    Vector3 despillColor;
 
-    // Apply functions to rgb
-    Vector3 hue = color::HueRotate(rgb, k_hueOffset);
+    // Hue
+    if(isColorConnected) {
+      despillColor = Vector3(colorRgb);
+
+      // caclc red angle
+      Vector3 v1 = color::VectorToPlane(k_spillPick, normVec);
+      Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f), normVec);
+      autoShift = color::ColorAngle(v1, v2);
+      autoShift = autoShift * 180.0f / M_PI_F;
+      hueShift = k_hueOffset - autoShift;
+    }
+    else {
+      if(_usePickedColor == 1) {
+        despillColor = Vector3(k_spillPick);
+      }
+      else {
+        despillColor =
+            Vector3(_clr == 0 ? 1.0f : 0.0f, _clr == 1 ? 1.0f : 0.0f, _clr == 2 ? 1.0f : 0.0f);
+      }
+      hueShift = _hueShift;
+    }
+
+    // Limit
+    //float limitResult = isLimitConnected ? limit
+    float limit = isLimitConnected ? *limitPtr : 1.0f;
+    if(isLimitConnected) {
+      rgb[0] *= limit;
+      rgb[1] *= limit;
+      rgb[2] *= limit;
+    }
 
     // Write RGB channels to the output
     for(int i = 0; i < 3; i++) {
@@ -296,8 +383,15 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
         *(row.writable(z) + x0) = spillMatte;
       }
     }
+
     inPixel++;
     outPixel++;
+    if(input(inputColor) != nullptr) {
+      colorPixel++;
+    }
+    if(input(inputLimit) != nullptr) {
+      limitPtr++;
+    }
   }
 }
 

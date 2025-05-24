@@ -9,6 +9,7 @@
 #ifndef DESPILL_AP_H
 #define DESPILL_AP_H
 
+#include "DDImage/DDMath.h"
 #include "DDImage/Iop.h"
 #include "DDImage/NukeWrapper.h"
 using namespace DD::Image;
@@ -18,7 +19,6 @@ using namespace DD::Image;
 #include "DDImage/Tile.h"
 #include "DDImage/Vector3.h"
 #include "include/Utils.h"
-
 
 #define HELP                                                                   \
   "DespillAP v1.0\n"                                                           \
@@ -76,12 +76,13 @@ class DespillAPIop : public Iop
   const char *node_help() const { return HELP; }
 
  private:
+  //knobs
   bool k_absMode;
   int k_colorType;
   int k_outputType;
   int k_despillMath;
   int k_respillMath;
-  float k_spillPick;
+  float k_spillPick[3];
   float k_respillColor;
   bool k_outputAlpha;
   bool k_invertAlpha;
@@ -105,6 +106,13 @@ class DespillAPIop : public Iop
   bool isLimitConnected;
   bool isColorConnected;
   bool isRespillConnected;
+
+  // internal
+  float _hueShift;
+  int _clr;
+  int _usePickedColor;
+  int _returnColor;
+  Vector3 normVec;
 
   imgcore::Bounds requestedBounds, formatBounds, fullFormatBounds;
   float proxyScale_;
