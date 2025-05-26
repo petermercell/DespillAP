@@ -362,15 +362,14 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     float hueShift = 0.0f;
     float autoShift = 0.0f;
     Vector3 despillColor;
-    normVec = Vector3(1.0f, 1.0f, 1.0f);
 
     // Hue
     if(isColorConnected) {
       // Lee el color del input 'color'
-      despillColor = Vector3(colorRgb);
+      despillColor = colorRgb;
       // caclc red angle
-      Vector3 v1 = color::VectorToPlane(k_spillPick, normVec);
-      Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f), normVec);
+      Vector3 v1 = color::VectorToPlane(k_spillPick);
+      Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f));
       autoShift = color::ColorAngle(v1, v2);
       autoShift = autoShift * 180.0f / M_PI_F;
       hueShift = k_hueOffset - autoShift;
@@ -387,7 +386,8 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     }
 
     // Limit
-    float limitResult = isLimitConnected ? k_hueLimit * (*limitPtr) : k_hueLimit;
+    float invertInputLimit = k_invertLimitMask ? (1.0f - (*limitPtr)) : *limitPtr;
+    float limitResult = isLimitConnected ? k_hueLimit * invertInputLimit : k_hueLimit;
 
     // Despill
     Vector4 despilled = color::Despill(rgb, hueShift, _clr, k_despillMath, limitResult,

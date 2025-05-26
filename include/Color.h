@@ -85,28 +85,25 @@ namespace color
     return hue;
   }
 
-  Vector3 VectorToPlane(const Vector3 v1, const Vector3 v2)
+  Vector3 VectorToPlane(const Vector3 v1, const Vector3 v2 = {1.0f, 1.0f, 1.0f})
   {
-    Vector3 ret;
     Vector3 proj;
+    float scale;
 
-    float scale = v2.dot(v1) / v2.dot(v2);
-
+    scale = v2.dot(v1) / v2.dot(v2);
     proj = v2 * scale;
-    ret = v1 - proj;
 
-    return ret;
+    return v1 - proj;
   }
 
   float ColorAngle(const Vector3 v1, const Vector3 v2)
   {
     Vector3 normal(1.0f, 1.0f, 1.0f);
 
-    float mag1 = std::sqrtf(v1.dot(v1));
-    float mag2 = std::sqrtf(v2.dot(v2));
+    float mag1 = v1.dot(v1);
+    float mag2 = v2.dot(v2);
 
-    float cosTheta = v1.dot(v2) / (mag1 * mag2);
-    float angle = std::acosf(cosTheta);
+    float angle = std::acosf(v1.dot(v2) / std::sqrtf(mag1 * mag2));
 
     Vector3 crs = v1.cross(v2);
 
