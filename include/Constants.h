@@ -3,6 +3,8 @@
 
 namespace Constants
 {
+  enum OutputType { OUTPUT_DESPILL, OUTPUT_SPILL };
+
   enum ColorType { COLOR_RED, COLOR_GREEN, COLOR_BLUE, COLOR_PICK };
 
   enum LumaMathType { LUMA_REC709, LUMA_CCIR601, LUMA_REC2020, LUMA_AVERAGE, LUMA_MAX };

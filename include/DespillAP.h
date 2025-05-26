@@ -18,6 +18,7 @@ using namespace DD::Image;
 #include "DDImage/Row.h"
 #include "DDImage/Tile.h"
 #include "DDImage/Vector3.h"
+#include "DDImage/Vector4.h"
 #include "include/Utils.h"
 
 #define HELP                                                                   \
@@ -83,15 +84,15 @@ class DespillAPIop : public Iop
   int k_despillMath;
   int k_respillMath;
   float k_spillPick[3];
-  float k_respillColor;
+  float k_respillColor[3];
   bool k_outputAlpha;
   bool k_invertAlpha;
-  float k_customMath;
+  float k_customWeight;
   float k_hueOffset;
   float k_hueLimit;
   bool k_protectTones;
   bool k_protectPrev;
-  float k_protectColor;
+  float k_protectColor[3];
   float k_protectTolerance;
   float k_protectFalloff;
   float k_protectEffect;

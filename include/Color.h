@@ -6,9 +6,25 @@
 
 #include "DDImage/DDMath.h"
 #include "DDImage/Vector3.h"
+#include "DDImage/Vector4.h"
+#include "include/Constants.h"
 #include "include/Pixel.h"
 
 namespace nuke = DD::Image;
+
+inline float magnitude(const Vector3 v)
+{
+  return std::sqrtf(v.dot(v));
+}
+
+inline float cosAngleBetween(const Vector3 a, const Vector3 b)
+{
+  float magA = magnitude(a);
+  float magB = magnitude(b);
+  if(magA == 0.0f || magB == 0.0f) return 0.0f;
+  return a.dot(b) / (magA * magB);
+}
+
 namespace color
 {
   enum ScreenColor {
@@ -18,44 +34,34 @@ namespace color
   };
   namespace luma
   {
-    void ToLumaRec709(const float (&rgb)[3], float (&luma)[3])
+    float ToLumaRec709(const float (&rgb)[3])
     {
-      float luminance = rgb[0] * 0.2126f + rgb[1] * 0.7152f + rgb[2] * 0.0722f;
-      luma[0] = luminance;
-      luma[1] = luminance;
-      luma[2] = luminance;
+      float l = rgb[0] * 0.2126f + rgb[1] * 0.7152f + rgb[2] * 0.0722f;
+      return l;
     }
 
-    void ToLumaCcir601(const float (&rgb)[3], float (&luma)[3])
+    float ToLumaCcir601(const float (&rgb)[3])
     {
-      float luminance = rgb[0] * 0.299f + rgb[1] * 0.587f + rgb[2] * 0.114f;
-      luma[0] = luminance;
-      luma[1] = luminance;
-      luma[2] = luminance;
+      float l = rgb[0] * 0.299f + rgb[1] * 0.587f + rgb[2] * 0.114f;
+      return l;
     }
 
-    void ToLumaRec2020(const float (&rgb)[3], float (&luma)[3])
+    float ToLumaRec2020(const float (&rgb)[3])
     {
-      float luminance = rgb[0] * 0.2627f + rgb[1] * 0.6780f + rgb[2] * 0.0593f;
-      luma[0] = luminance;
-      luma[1] = luminance;
-      luma[2] = luminance;
+      float l = rgb[0] * 0.2627f + rgb[1] * 0.6780f + rgb[2] * 0.0593f;
+      return l;
     }
 
-    void ToLumaAverage(const float (&rgb)[3], float (&luma)[3])
+    float ToLumaAverage(const float (&rgb)[3])
     {
-      float luminance = (rgb[0] + rgb[1] + rgb[2]) / 3.0f;
-      luma[0] = luminance;
-      luma[1] = luminance;
-      luma[2] = luminance;
+      float l = (rgb[0] + rgb[1] + rgb[2]) / 3.0f;
+      return l;
     }
 
-    void ToLumaMax(const float (&rgb)[3], float (&luma)[3])
+    float ToLumaMax(const float (&rgb)[3])
     {
-      float luminance = std::max({rgb[0], rgb[1], rgb[2]});
-      luma[0] = luminance;
-      luma[1] = luminance;
-      luma[2] = luminance;
+      float l = std::max({rgb[0], rgb[1], rgb[2]});
+      return l;
     }
   }  // namespace luma
 
@@ -84,15 +90,10 @@ namespace color
     Vector3 ret;
     Vector3 proj;
 
-    float scale = v1.dot(v2) / v2.dot(v1);
+    float scale = v2.dot(v1) / v2.dot(v2);
 
-    proj[0] = v2.x * scale;
-    proj[1] = v2.y * scale;
-    proj[2] = v2.z * scale;
-
-    ret[0] = v2.x - proj.x;
-    ret[1] = v2.y - proj.y;
-    ret[2] = v2.z - proj.z;
+    proj = v2 * scale;
+    ret = v1 - proj;
 
     return ret;
   }
@@ -104,16 +105,123 @@ namespace color
     float mag1 = std::sqrtf(v1.dot(v1));
     float mag2 = std::sqrtf(v2.dot(v2));
 
-    float cosTheta = clamp(v1.dot(v2) / (mag1 * mag2), -1.0f, 1.0f);
+    float cosTheta = v1.dot(v2) / (mag1 * mag2);
     float angle = std::acosf(cosTheta);
 
-    if(normal.dot(v1.cross(v2)) > 0.0f) {
+    Vector3 crs = v1.cross(v2);
+
+    if(normal.dot(crs) > 0.0f) {
       angle = -angle;
     }
 
     return angle;
   }
 
+  // src_color -> rgb
+  // hueShift -> hueShift
+  // clr -> _clr
+  // mode -> despillMath
+  // limit -> limit
+  // weights -> customWeight
+  // prot1_on -> protectTones
+  // prot1 -> protectColor
+  // prot1_tolerance -> protectTolerance
+  // prot1_mult -> protectEffect
+  // prot1_falloff -> protectFalloff
+  //* === FUNCION PRINCIPAL DE DESPILL ===
+  Vector4 Despill(const Vector3 rgb, float hueShift, int _clr, int despillMath, float limit,
+                  float customWeight, bool protectTones, Vector3 protectColor,
+                  float protectTolerance, float protectEffect, float protectFalloff)
+  {
+    Vector3 hueIn = HueRotate(rgb, hueShift);
+    Vector4 despilled(hueIn[0], hueIn[1], hueIn[2], 0.0f);
+
+    float limitResult = 0.0f;
+    int chans[2];
+
+    // Determina que canales usar
+    if(_clr == Constants::COLOR_RED) {
+      chans[0] = Constants::COLOR_GREEN;
+      chans[1] = Constants::COLOR_BLUE;
+    }
+    else if(_clr == Constants::COLOR_GREEN) {
+      chans[0] = Constants::COLOR_RED;
+      chans[1] = Constants::COLOR_BLUE;
+    }
+    else if(_clr == Constants::COLOR_BLUE) {
+      chans[0] = Constants::COLOR_RED;
+      chans[1] = Constants::COLOR_GREEN;
+    }
+
+    // Aplica el tipo de despill
+    if(despillMath == Constants::DESPILL_AVERAGE) {
+      limitResult = (despilled[chans[0]] + despilled[chans[1]]) / 2;
+    }
+    else if(despillMath == Constants::DESPILL_MAX) {
+      limitResult = MAX(despilled[chans[0]], despilled[chans[1]]);
+    }
+    else if(despillMath == Constants::DESPILL_MIN) {
+      limitResult = MIN(despilled[chans[0]], despilled[chans[1]]);
+    }
+    else {
+      limitResult = despilled[chans[0]] * customWeight + despilled[chans[1]] * (1 - customWeight);
+    }
+
+    // Aplica proteccion de tonos
+    float protectResult;
+    bool isProtectDifferent = (protectColor[0] != protectColor[1]) ||
+                              (protectColor[0] != protectColor[2]) ||
+                              (protectColor[1] != protectColor[2]);
+
+    if(protectTones && isProtectDifferent) {
+      float cosProtectAngle;
+      cosProtectAngle = cosAngleBetween(rgb, protectColor);
+      cosProtectAngle = clamp(cosProtectAngle, 0.0f, 1.0f);
+      protectResult = std::powf(cosProtectAngle, 1 / std::powf(protectTolerance, protectFalloff));
+      limitResult = limitResult * (1 + protectResult * protectEffect);
+    }
+
+    // aplica el despill y la rotacion de matiz de salida
+    for(int c = 0; c < 3; c++) {
+      despilled[c] = c == _clr ? MIN(despilled[c], limitResult * limit) : despilled[c];
+    }
+
+    Vector3 rgbDespilled(despilled.x, despilled.y, despilled.z);
+    rgbDespilled = HueRotate(rgbDespilled, -hueShift);
+    despilled.x = rgbDespilled.x;
+    despilled.y = rgbDespilled.y;
+    despilled.z = rgbDespilled.z;
+    despilled.w = protectResult;  // alpha
+
+    return despilled;
+  }
+
+  //* === FUNCION PRINCIPAL DE LUMA ===
+  float GetLuma(const Vector4 rgb, int math)
+  {
+    float luma;
+    switch(math) {
+      case Constants::LUMA_REC709:
+        luma = luma::ToLumaRec709({rgb.x, rgb.y, rgb.z});
+        break;
+      case Constants::LUMA_CCIR601:
+        luma = luma::ToLumaCcir601({rgb.x, rgb.y, rgb.z});
+        break;
+      case Constants::LUMA_REC2020:
+        luma = luma::ToLumaRec2020({rgb.x, rgb.y, rgb.z});
+        break;
+      case Constants::LUMA_AVERAGE:
+        luma = luma::ToLumaAverage({rgb.x, rgb.y, rgb.z});
+        break;
+      case Constants::LUMA_MAX:
+        luma = luma::ToLumaMax({rgb.x, rgb.y, rgb.z});
+        break;
+      default:
+        luma = luma::ToLumaRec709({rgb.x, rgb.y, rgb.z});
+        break;
+    }
+    return luma;
+  }
 }  // namespace color
 
 #endif  // COLOR_H

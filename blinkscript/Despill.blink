@@ -1,16 +1,3 @@
-//---------------------------------------------------------
-// apDespillKernel - apDespill v1.0 by Adrian Pueyo
-//
-// Plugin para eliminar "spill" (derrame de color) de imágenes
-// Permite despill de cualquier matiz (no solo primarios RGB)
-// Incluye diferentes algoritmos y protección de tonos
-//
-// v2.0: Capacidad de usar inputs de imagen para controles
-// y realizar key completo con respill
-//
-// adrianpueyo.com, 2014-2017
-// ---------------------------------------------------------
-
 // === FUNCIONES DE CONVERSIÓN A LUMINANCIA ===
 
 // Convierte RGB a luminancia usando estándar CCIR 601 (TV estándar)
@@ -99,12 +86,36 @@ inline float colorAngle(const float3 v1, const float3 v2)
   return ang;
 }
 
+// === FUNCIÓN DE CÁLCULO DE LUMINANCIA ===
+
+// Calcula la luminancia usando diferentes métodos matemáticos
+inline float getLuma(float4 src_color, int luma_math)
+{
+  float luma;
+  if(luma_math == 0) {
+    luma = y_convert_rec709(src_color);  // Rec. 709
+  }
+  else if(luma_math == 1) {
+    luma = y_convert_ccir601(src_color);  // CCIR 601
+  }
+  else if(luma_math == 2) {
+    luma = y_convert_rec2020(src_color);  // Rec. 2020
+  }
+  else if(luma_math == 3) {
+    luma = (src_color[0] + src_color[1] + src_color[2]) / 3;  // Promedio RGB
+  }
+  else {
+    luma = max(max(src_color[0], src_color[1]), src_color[2]);  // Máximo RGB
+  }
+  return luma;
+}
+
 // === FUNCIÓN PRINCIPAL DE DESPILL ===
 
 // Función principal que calcula el despill para un color RGBA
-inline float4 apDespillMain(float4 src_color, float hueShift, int clr, int mode, float limit,
-                            float weights, int prot1_preview, int prot1_on, float3 prot1,
-                            float prot1_tolerance, float prot1_mult, float prot1_falloff)
+inline float4 Despill(float4 src_color, float hueShift, int clr, int mode, float limit,
+                      float weights, int prot1_preview, int prot1_on, float3 prot1,
+                      float prot1_tolerance, float prot1_mult, float prot1_falloff)
 {
   // 1. Aplica rotación de matiz de entrada
   float4 despilled = hueRotate(src_color, hueShift);
@@ -172,33 +183,7 @@ inline float4 apDespillMain(float4 src_color, float hueShift, int clr, int mode,
   return despilled;
 }
 
-// === FUNCIÓN DE CÁLCULO DE LUMINANCIA ===
-
-// Calcula la luminancia usando diferentes métodos matemáticos
-inline float getLuma(float4 src_color, int luma_math)
-{
-  float luma;
-  if(luma_math == 0) {
-    luma = y_convert_rec709(src_color);  // Rec. 709
-  }
-  else if(luma_math == 1) {
-    luma = y_convert_ccir601(src_color);  // CCIR 601
-  }
-  else if(luma_math == 2) {
-    luma = y_convert_rec2020(src_color);  // Rec. 2020
-  }
-  else if(luma_math == 3) {
-    luma = (src_color[0] + src_color[1] + src_color[2]) / 3;  // Promedio RGB
-  }
-  else {
-    luma = max(max(src_color[0], src_color[1]), src_color[2]);  // Máximo RGB
-  }
-  return luma;
-}
-
-// === KERNEL PRINCIPAL ===
-
-kernel apDespillKernel : ImageComputationKernel<ePixelWise>
+kernel DespillKernel : ImageComputationKernel<ePixelWise>
 {
   // === DEFINICIÓN DE IMÁGENES ===
   Image<eRead, eAccessPoint, eEdgeClamped> src;        // Imagen fuente
@@ -252,7 +237,6 @@ local:
     defineParam(shift, "shift", 0.0f);  // Valor por defecto del shift
   }
 
-  // === INICIALIZACIÓN ===
   void init()
   {
     // 1. Determina qué color procesar
@@ -293,7 +277,6 @@ local:
     }
   }
 
-  // === PROCESAMIENTO PRINCIPAL ===
   void process()
   {
     // Evita cálculos si no hay despill seleccionado
@@ -330,12 +313,8 @@ local:
 
     // Aplica límite desde input si está habilitado (usa alpha de src)
     float limit_result = use_limit_input == 1 ? limit * src(3) : limit;
-
-    // 1. Aplica despill a la imagen fuente
-    float4 despilled =
-        apDespillMain(src(), hueShift, _clr, mode, limit_result, weights, prot1_preview, prot1_on,
-                      prot1, prot1_tolerance, prot1_mult, prot1_falloff);
-
+    float4 despilled = Despill(src(), hueShift, _clr, mode, limit_result, weights, prot1_preview,
+                               prot1_on, prot1, prot1_tolerance, prot1_mult, prot1_falloff);
     // Si está en modo preview de protección, muestra solo eso
     if(prot1_preview == 1 && prot1_on == 1) {
       dst() = src() * clamp(despilled[3] * prot1_mult, 0.0f, 1.0f);
@@ -374,34 +353,6 @@ local:
       despilled_full = src() - spill_full;
     }
 
-    // Calcula el color de respill final
-    float4 respill_color_result =
-        use_spill_input == 1 ? spill_src() * respill_color : respill_color;
-
-    // 3. Genera la salida según el modo
-    if(outmode == 0) {
-      // Modo despill: imagen despilled + respill coloreado
-      result = despilled_full + spill_luma_full * respill_color_result;
-    }
-    else {
-      // Modo spill: solo el spill extraído
-      result = spill_full;
-    }
-
-    // Maneja el canal alpha de salida
-    if(output_alpha == 0) {
-      result[3] = src(3);  // Mantiene alpha original
-    }
-    else {
-      if(output_alpha_inverted == 0) {
-        result[3] = spill_luma_full;  // Alpha = intensidad del spill
-      }
-      else {
-        result[3] = 1 - spill_luma_full;  // Alpha = inverso del spill
-      }
-    }
-
-    // Escribe el resultado final
-    dst() = result;
+    dst() = float4(spill_luma, spill_luma, spill_luma, 1.0f);
   }
 };
