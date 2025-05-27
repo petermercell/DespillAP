@@ -19,8 +19,7 @@ namespace imgcore
 
   nuke::Box BoundsToBox(imgcore::Bounds bounds)
   {
-    return nuke::Box(bounds.x1(), bounds.y1(), bounds.x2() + 1,
-                     bounds.y2() + 1);
+    return nuke::Box(bounds.x1(), bounds.y1(), bounds.x2() + 1, bounds.y2() + 1);
   }
 
   imgcore::Bounds InputBounds(nuke::Iop* input)
@@ -28,26 +27,21 @@ namespace imgcore
     return imgcore::BoxToBounds(input->info().box());
   }
 
-  void FetchImage(imgcore::Image* image, nuke::Iop* input,
-                  nuke::Channel channel)
+  void FetchImage(imgcore::Image* image, nuke::Iop* input, nuke::Channel channel)
   {
-    nuke::ImagePlane channel_plane(imgcore::BoundsToBox(image->GetBounds()),
-                                   false, channel);
+    nuke::ImagePlane channel_plane(imgcore::BoundsToBox(image->GetBounds()), false, channel);
     input->fetchPlane(channel_plane);
-    image->MemCpyIn(channel_plane.readable(),
-                    channel_plane.rowStride() * sizeof(float));
+    image->MemCpyIn(channel_plane.readable(), channel_plane.rowStride() * sizeof(float));
   }
-  void FetchImage(imgcore::Image* image, nuke::Iop* input,
-                  nuke::Channel channel, imgcore::Bounds plane_bounds)
+  void FetchImage(imgcore::Image* image, nuke::Iop* input, nuke::Channel channel,
+                  imgcore::Bounds plane_bounds)
   {
-    nuke::ImagePlane channel_plane(imgcore::BoundsToBox(plane_bounds), false,
-                                   channel);
+    nuke::ImagePlane channel_plane(imgcore::BoundsToBox(plane_bounds), false, channel);
     input->fetchPlane(channel_plane);
-    image->MemCpyIn(channel_plane.readable(),
-                    channel_plane.rowStride() * sizeof(float), plane_bounds);
+    image->MemCpyIn(channel_plane.readable(), channel_plane.rowStride() * sizeof(float),
+                    plane_bounds);
   }
-  const float* GetPlanePtr(const nuke::ImagePlane& plane,
-                           nuke::Channel channel = nuke::Chan_Black)
+  const float* GetPlanePtr(const nuke::ImagePlane& plane, nuke::Channel channel = nuke::Chan_Black)
   {
     int channel_offset = plane.chanNo(channel);
     return plane.readable() + channel_offset;
@@ -56,10 +50,8 @@ namespace imgcore
                            nuke::Channel channel = nuke::Chan_Black)
   {
     int channel_offset = plane.chanNo(channel);
-    return plane.readable() +
-           (plane.bounds().clampy(y) - plane.bounds().y()) * plane.rowStride() +
-           (plane.bounds().clampx(x) - plane.bounds().x()) * plane.colStride() +
-           channel_offset;
+    return plane.readable() + (plane.bounds().clampy(y) - plane.bounds().y()) * plane.rowStride() +
+           (plane.bounds().clampx(x) - plane.bounds().x()) * plane.colStride() + channel_offset;
   }
   std::size_t GetPlanePitch(const nuke::ImagePlane& plane)
   {

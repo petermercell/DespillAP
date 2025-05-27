@@ -9,183 +9,180 @@
 #include <vector>
 
 // ========================================================================
-// CONFIGURACIÓN DE EXPORTACIÓN DE DLL (SOLO WINDOWS)
+// DLL EXPORT CONFIGURATION (WINDOWS ONLY)
 // ========================================================================
 #ifdef _WIN32
 #ifdef _MSC_VER
-#pragma warning(disable : 4251)  // Deshabilita warning sobre DLL export
+#pragma warning(disable : 4251)  // Disable warning about DLL export
 #endif
-#define WINLIB_EXPORT __declspec(dllexport)  // Macro para exportar desde DLL
+#define WINLIB_EXPORT __declspec(dllexport)  // Macro to export from DLL
 #else
-#define WINLIB_EXPORT  // En otros sistemas, macro vacía
+#define WINLIB_EXPORT  // On other systems, empty macro
 #endif
 
 namespace imgcore
 {
 
   // ========================================================================
-  // ESTRUCTURA ATTRIBUTE - Par nombre-valor simple
+  // ATTRIBUTE STRUCTURE - Simple name-value pair
   // ========================================================================
   struct Attribute
   {
-    std::string name;  // Nombre del atributo (ej: "thread_id", "channel")
-    int value;         // Valor entero asociado
+    std::string name;  // Attribute name (e.g.: "thread_id", "channel")
+    int value;         // Associated integer value
 
-    // Constructor que inicializa ambos campos
+    // Constructor that initializes both fields
     Attribute(std::string name, int value) : name(name), value(value) {}
   };
 
   // ========================================================================
-  // CLASE BASE ATTRIBUTEBASE - Gestiona colección de atributos
+  // ATTRIBUTEBASE BASE CLASS - Manages collection of attributes
   // ========================================================================
   class WINLIB_EXPORT AttributeBase
   {
    public:
-    // Añade un solo atributo por nombre y valor
+    // Adds a single attribute by name and value
     void AddAttribute(const std::string& name, int value)
     {
       attributes_.push_back(Attribute(name, value));
     }
 
-    // Añade múltiples atributos de una vez
+    // Adds multiple attributes at once
     void AddAttributes(std::vector<Attribute> attributes)
     {
-      // Inserta todos los atributos al final del vector existente
-      attributes_.insert(attributes_.end(), attributes.begin(),
-                         attributes.end());
+      // Inserts all attributes at the end of the existing vector
+      attributes_.insert(attributes_.end(), attributes.begin(), attributes.end());
     }
 
-    // Busca un atributo por nombre y devuelve su valor
+    // Searches for an attribute by name and returns its value
     int GetAttribute(const std::string& name) const
     {
-      // Busca usando lambda: compara el nombre de cada atributo
-      auto it = std::find_if(attributes_.begin(), attributes_.end(),
-                             [name](const Attribute& attr) {
-                               return attr.name.compare(name) == 0;
-                             });
+      // Search using lambda: compares the name of each attribute
+      auto it = std::find_if(attributes_.begin(), attributes_.end(), [name](const Attribute& attr) {
+        return attr.name.compare(name) == 0;
+      });
 
       if(it != attributes_.end()) {
-        return it->value;  // Encontrado: devuelve el valor
+        return it->value;  // Found: return the value
       }
       else {
-        // No encontrado: lanza excepción con mensaje descriptivo
+        // Not found: throw exception with descriptive message
         throw std::out_of_range(std::string("No attribute named ") + name);
       }
     }
 
    protected:
-    std::vector<Attribute> attributes_;  // Almacena la colección de atributos
+    std::vector<Attribute> attributes_;  // Stores the collection of attributes
   };
 
   // ========================================================================
-  // CLASE TEMPLATE ARRAY - Contenedor de objetos con atributos
+  // ARRAY TEMPLATE CLASS - Container for objects with attributes
   // ========================================================================
   template <typename T>
   class Array
   {
    public:
-    // ---- DEFINICIÓN DE TIPOS PARA ITERADORES ----
+    // ---- ITERATOR TYPE DEFINITIONS ----
     typedef typename boost::ptr_list<T>::iterator ptr_list_it;
     typedef typename boost::ptr_list<T>::reverse_iterator ptr_list_rit;
 
-    // ---- GESTIÓN BÁSICA DEL CONTENEDOR ----
+    // ---- BASIC CONTAINER MANAGEMENT ----
 
-    // Añade un nuevo objeto T al final del array
+    // Adds a new T object to the end of the array
     virtual void Add() { array_.push_back(new T()); }
 
-    // Limpia todo el contenedor
+    // Clears the entire container
     void Clear() { array_.clear(); }
 
-    // Obtiene puntero al último elemento
+    // Gets pointer to the last element
     T* GetBackPtr() { return &array_.back(); }
 
-    // ---- BÚSQUEDA POR ATRIBUTOS ----
+    // ---- SEARCH BY ATTRIBUTES ----
 
-    // Busca objeto por un solo atributo (nombre + valor)
+    // Searches for object by a single attribute (name + value)
     T* GetPtrByAttribute(const std::string& name, int value)
     {
       ptr_list_it it;
-      // Recorre todos los elementos del array
+      // Iterate through all elements in the array
       for(it = array_.begin(); it != array_.end(); ++it) {
-        // Compara el atributo del elemento actual con el buscado
+        // Compare the current element's attribute with the searched one
         if(it->GetAttribute(name) == value) {
           break;
         }
       }
 
       if(it != array_.end()) {
-        return &(*it);  // Encontrado: devuelve puntero al objeto
+        return &(*it);  // Found: return pointer to object
       }
       else {
-        // No encontrado: crea mensaje de error y lanza excepción
+        // Not found: create error message and throw exception
         std::stringstream ss;
-        ss << "imgcore::Array - no image with attribute '" << name
-           << "' = " << value;
+        ss << "imgcore::Array - no image with attribute '" << name << "' = " << value;
         throw std::out_of_range(ss.str());
       }
     }
 
-    // Busca objeto que coincida con TODOS los atributos de la lista
+    // Searches for object that matches ALL attributes in the list
     T* GetPtrByAttributes(std::vector<Attribute> list)
     {
       ptr_list_it it;
-      // Recorre todos los elementos del array
+      // Iterate through all elements in the array
       for(it = array_.begin(); it != array_.end(); ++it) {
         unsigned int num_found = 0;
 
-        // Para cada elemento, verifica cuántos atributos coinciden
+        // For each element, check how many attributes match
         for(auto a_it = list.begin(); a_it != list.end(); ++a_it) {
           if(it->GetAttribute(a_it->name) == a_it->value) {
-            num_found++;  // Contador de coincidencias
+            num_found++;  // Match counter
           }
         }
 
-        // Si coinciden TODOS los atributos, encontramos el objeto
+        // If ALL attributes match, we found the object
         if(num_found == list.size()) {
           break;
         }
       }
 
       if(it != array_.end()) {
-        return &(*it);  // Encontrado
+        return &(*it);  // Found
       }
       else {
-        // No encontrado: construye mensaje detallado con todos los atributos buscados
+        // Not found: build detailed message with all searched attributes
         std::stringstream ss;
         ss << "imgcore::Array - No image with attributes: ";
         for(auto a_it = list.begin(); a_it != list.end(); ++a_it) {
           ss << "'" << a_it->name << "'' = " << a_it->value << "'";
           if(a_it + 1 != list.end()) {
             ss << ", ";
-          }  // Separador entre atributos
+          }  // Separator between attributes
         }
         throw std::out_of_range(ss.str());
       }
     }
 
-    // ---- VERIFICACIÓN DE EXISTENCIA (SIN LANZAR EXCEPCIONES) ----
+    // ---- EXISTENCE CHECKING (WITHOUT THROWING EXCEPTIONS) ----
 
-    // Verifica si existe un objeto con el atributo especificado
+    // Checks if an object with the specified attribute exists
     bool HasAttribute(const std::string& name, int value)
     {
       bool found = false;
       for(ptr_list_it it = array_.begin(); it != array_.end(); ++it) {
         if(it->GetAttribute(name) == value) {
           found = true;
-          break;  // Termina en cuanto encuentra uno
+          break;  // Stop as soon as one is found
         }
       }
       return found;
     }
 
-    // Verifica si existe un objeto con TODOS los atributos especificados
+    // Checks if an object with ALL specified attributes exists
     bool HasAttributes(std::vector<Attribute> list)
     {
       bool found = false;
       for(ptr_list_it it = array_.begin(); it != array_.end(); ++it) {
         unsigned int num_found = 0;
 
-        // Cuenta coincidencias (mismo algoritmo que GetPtrByAttributes)
+        // Count matches (same algorithm as GetPtrByAttributes)
         for(auto a_it = list.begin(); a_it != list.end(); ++a_it) {
           if(it->GetAttribute(a_it->name) == a_it->value) {
             num_found++;
@@ -200,27 +197,19 @@ namespace imgcore
       return found;
     }
 
-    // ---- ACCESO A ITERADORES PARA RECORRIDO MANUAL ----
-    ptr_list_it GetBegin() { return array_.begin(); }  // Iterador al inicio
-    ptr_list_it GetEnd() { return array_.end(); }      // Iterador al final
-    ptr_list_rit GetRBegin()
-    {
-      return array_.rbegin();
-    }  // Iterador reverso al inicio
-    ptr_list_rit GetREnd()
-    {
-      return array_.rend();
-    }  // Iterador reverso al final
+    // ---- ITERATOR ACCESS FOR MANUAL TRAVERSAL ----
+    ptr_list_it GetBegin() { return array_.begin(); }  // Iterator to beginning
+    ptr_list_it GetEnd() { return array_.end(); }      // Iterator to end
+    ptr_list_rit GetRBegin() { return array_.rbegin(); }  // Reverse iterator to beginning
+    ptr_list_rit GetREnd() { return array_.rend(); }  // Reverse iterator to end
 
    private:
-    // ---- VALIDACIÓN EN TIEMPO DE COMPILACIÓN ----
-    // Asegura que T herede de AttributeBase (sino, error de compilación)
-    static_assert(std::is_base_of<AttributeBase, T>::value,
-                  "T must inherit from AttributeBase");
+    // ---- COMPILE-TIME VALIDATION ----
+    // Ensures that T inherits from AttributeBase (otherwise, compilation error)
+    static_assert(std::is_base_of<AttributeBase, T>::value, "T must inherit from AttributeBase");
 
    protected:
-    boost::ptr_list<T>
-        array_;  // Contenedor que maneja automáticamente la memoria
+    boost::ptr_list<T> array_;  // Container that automatically manages memory
   };
 
 }  // namespace imgcore

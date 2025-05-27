@@ -114,18 +114,6 @@ namespace color
     return angle;
   }
 
-  // src_color -> rgb
-  // hueShift -> hueShift
-  // clr -> _clr
-  // mode -> despillMath
-  // limit -> limit
-  // weights -> customWeight
-  // prot1_on -> protectTones
-  // prot1 -> protectColor
-  // prot1_tolerance -> protectTolerance
-  // prot1_mult -> protectEffect
-  // prot1_falloff -> protectFalloff
-  //* === FUNCION PRINCIPAL DE DESPILL ===
   Vector4 Despill(const Vector3 rgb, float hueShift, int _clr, int despillMath, float limit,
                   float customWeight, bool protectTones, Vector3 protectColor,
                   float protectTolerance, float protectEffect, float protectFalloff)
@@ -194,7 +182,6 @@ namespace color
     return despilled;
   }
 
-  //* === FUNCION PRINCIPAL DE LUMA ===
   float GetLuma(const Vector4 rgb, int math)
   {
     float luma;
