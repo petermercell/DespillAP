@@ -218,58 +218,88 @@ void DespillAPIop::set_input(int i, Op *inputOp, int input, int offset)
 
 void DespillAPIop::_validate(bool for_real)
 {
+  // copy image info
   copy_info(0);
 
+  // setup output channels:
+  // include all requested channels plus our spill output channel
   nuke::ChannelSet outChannels = channels();
   outChannels += k_outputSpillChannel;
   set_out_channels(outChannels);
   info_.turn_on(outChannels);
 
+  // initialize normalization vector for colorspace calcs
   normVec = Vector3(1.0f, 1.0f, 1.0f);
 
+  // get the picked spill color
   Vector3 pickSpill(k_spillPick);
 
+  // determine color selection mode
+  // and setup internal variables
   if(isColorConnected) {
-    _clr = 0;
-    _usePickedColor = 1;
+    // color input is connected:
+    // use automatic color detection
+    _clr = 0;             // red channel
+    _usePickedColor = 1;  // flag to use picked color
   }
   else if(k_colorType != Constants::COLOR_PICK) {
-    _usePickedColor = 0;
-    _clr = k_colorType;
+    // manual channel selection (Red/Green/Blue butons)
+    _usePickedColor = 0;  // use channel selection, not picked color
+    _clr = k_colorType;   // use selected channel (0=Red, 1=Green, 2=Blue)
   }
   else if(pickSpill.x == pickSpill.y && pickSpill.x == pickSpill.z) {
-    _returnColor = 1;
+    // if picked color is grayscale (all rgb values equal)
+    // this means that no valid color was picked,
+    // so pass trought input unchanged
+    _returnColor = 1;  // bypass all processing
   }
   else {
-    _usePickedColor = 1;
-    _clr = 0;
+    // valid color was picked from picker knob
+    _usePickedColor = 1;  // use the picked color
+    _clr = 0;             // default processing channel
   }
 
+  // calculate hue shift for non connected color mode
   if(!isColorConnected) {
     float _autoShift = 0.0f;
+
     if(_usePickedColor == 1) {
+      // calculate automatic hue shift based on picked color
+      // convert picked color and red reference to plane vectors for angle calc
       Vector3 v1 = color::VectorToPlane(k_spillPick, normVec);
-      Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f), normVec);
+      Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f), normVec);  // red reference
+
+      // calculate angle between picked color and red reference
       _autoShift = color::ColorAngle(v1, v2);
-      _autoShift = _autoShift * 180.0f / M_PI_F;
+      _autoShift = _autoShift * 180.0f / M_PI_F;  // rads to deg
     }
+
+    // final hue shift: user offset - automatic shift
+    // this allows user to fine-tune the calculated shift
     _hueShift = k_hueOffset - _autoShift;
   }
 }
 
 void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, int count)
 {
+  // ensure RGB channels are always requested for processing
   nuke::ChannelSet requestedChannels = channels;
   requestedChannels += Mask_RGB;
 
+  // request data fron input 'Source'
   input(inputSource)->request(input(inputSource)->info().box(), requestedChannels, Mask_RGB);
 
+  // request limit matte if its connected to input 'Limit'
   if(input(inputLimit) != nullptr) {
     input(inputLimit)->request(Mask_All, count);
   };
+
+  // request color reference if its connected to input 'Color'
   if(input(inputColor) != nullptr) {
     input(inputColor)->request(input(inputColor)->info().box(), Mask_RGB, count);
   };
+
+  // request respill color if its connected to input 'Respill'
   if(input(inputRespill) != nullptr) {
     input(inputRespill)->request(input(inputRespill)->info().box(), Mask_RGB, count);
   };
@@ -283,28 +313,29 @@ void DespillAPIop::engine(int y, int x, int r, ChannelMask channels, Row &row)
 
 void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &row)
 {
+  // get main input data
   nuke::ChannelSet requestedChannels = channels;
   requestedChannels += Mask_RGBA;  // Add RGBA
   row.get(input0(), y, x, r, requestedChannels);
 
-  // Copy all other channels
-  nuke::ChannelSet copyMask = channels - nuke::Mask_RGBA;
+  // copy all non rgb channels
+  nuke::ChannelSet copyMask = channels - nuke::Mask_RGB;
   row.pre_copy(row, copyMask);
   row.copy(row, copyMask, x, r);
 
-  // Get input color row
+  // get input color reference (for atm color detection)
   Row color_row(x, r);
   if(input(inputColor) != nullptr) {
     color_row.get(*input(inputColor), y, x, r, Mask_RGB);
   }
 
-  // Get input respill row
+  // get optional respill color input (custom replacement color)
   Row respill_row(x, r);
   if(input(inputRespill) != nullptr) {
     respill_row.get(*input(inputRespill), y, x, r, Mask_RGB);
   }
 
-  // Get input limit channel
+  // get limit matte input
   Row limit_matte_row(x, r);
   const float *limitPtr;
   if(input(inputLimit) != nullptr) {
@@ -314,19 +345,25 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     limitPtr = limit_matte_row[k_limitChannel] + x;
   }
 
+  // get pointer to input alpha channel for pass-throught
+  const float *input_alpha = row[Chan_Alpha] + x;
+
   Vector3 rgb;
   Vector3 colorRgb;
   Vector3 respillRgb;
   Vector3 spillLuma;
+
+  // pixel pointers for efficient multichannel processing from afx tools
   imgcore::Pixel<const float> colorPixel(3);
   imgcore::Pixel<const float> respillPixel(3);
   imgcore::Pixel<const float> inPixel(3);
   imgcore::Pixel<float> outPixel(3);
 
-  // increment helper
+  // lambda to increment all pixel pointers
   auto incrementPointers = [&]() {
     inPixel++;
     outPixel++;
+    input_alpha++;
     if(input(inputColor) != nullptr) {
       colorPixel++;
     }
@@ -338,6 +375,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     }
   };
 
+  // set pixel pointers to point to RGB channels
   for(int i = 0; i < 3; ++i) {
     inPixel.SetPtr(row[static_cast<nuke::Channel>(i + 1)] + x, i);
     colorPixel.SetPtr(color_row[static_cast<nuke::Channel>(i + 1)] + x, i);
@@ -345,14 +383,16 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     outPixel.SetPtr(row.writable(static_cast<nuke::Channel>(i + 1)) + x, i);
   }
 
-  // Loop through the pixels
+  // Main pixel loop
   for(int x0 = x; x0 < r; ++x0) {
+    // read rgb values from the current pixel
     for(int i = 0; i < 3; i++) {
       rgb[i] = inPixel.GetVal(i);
       colorRgb[i] = colorPixel.GetVal(i);
       respillRgb[i] = respillPixel.GetVal(i);
     }
 
+    // early exit if color is unchanged
     if(_returnColor == 1) {
       incrementPointers();
       continue;
@@ -363,62 +403,69 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     float autoShift = 0.0f;
     Vector3 despillColor;
 
-    // Hue
+    // determine despill color and hue shift
     if(isColorConnected) {
-      // Lee el color del input 'color'
+      // use color from connected input for automatic color detection
       despillColor = colorRgb;
-      // caclc red angle
-      Vector3 v1 = color::VectorToPlane(k_spillPick);
+      Vector3 v1 = color::VectorToPlane(despillColor);
       Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f));
       autoShift = color::ColorAngle(v1, v2);
-      autoShift = autoShift * 180.0f / M_PI_F;
+      autoShift = autoShift * 180.0f / M_PI_F;  // rad to deg
       hueShift = k_hueOffset - autoShift;
     }
     else {
+      // use manual color detection
       if(_usePickedColor == 1) {
         despillColor = Vector3(k_spillPick);
       }
       else {
+        // create a color constant based on selected channel
+        // 0=red, 1=green, 2=blue
         despillColor =
             Vector3(_clr == 0 ? 1.0f : 0.0f, _clr == 1 ? 1.0f : 0.0f, _clr == 2 ? 1.0f : 0.0f);
       }
       hueShift = _hueShift;
     }
 
-    // Limit
+    // apply limit matte if connected
     float invertInputLimit = k_invertLimitMask ? (1.0f - (*limitPtr)) : *limitPtr;
     float limitResult = isLimitConnected ? k_hueLimit * invertInputLimit : k_hueLimit;
 
-    // Despill
+    // perform limit operation
     Vector4 despilled = color::Despill(rgb, hueShift, _clr, k_despillMath, limitResult,
                                        k_customWeight, k_protectTones, k_protectColor,
                                        k_protectTolerance, k_protectEffect, k_protectFalloff);
 
+    // case: if tones are protected, output protection matte
     if(k_protectPrev && k_protectTones) {
       for(int i = 0; i < 3; i++) {
         outPixel[i] = rgb[i] * clamp(despilled[3] * k_protectEffect, 0.0f, 1.0f);
       }
+      // move to next pixel
       incrementPointers();
       continue;
     }
 
-    // calcula el spill
+    // calculate spill amount (difference between original and despilled)
     Vector4 spill = Vector4(rgb[0], rgb[1], rgb[2], 1.0f) - despilled;
     float spillLuma = color::GetLuma(spill, k_respillMath);
 
-    // procesa el key
+    // process key generation and normalization
     Vector4 result;
     Vector4 despilledFull, spillFull;
     float spillLumaFull;
 
     if(!k_absMode) {
+      // relative mode: use calculated values
       despilledFull = despilled;
       spillFull = spill;
       spillLumaFull = spillLuma;
     }
     else {
-      Vector4 despillColor4 = Vector4(despillColor.x, despillColor.y, despillColor.z, 1.0f);
+      // absolute mode: normalize spill relative to pícked color
+      Vector4 despillColor4 = Vector4(despillColor.x, despillColor.y, despillColor.z, 0.0f);
 
+      // calculate how much the pícked color would be despilled
       Vector4 pickSpillDespilled = color::Despill(
           despillColor, hueShift, _clr, k_despillMath, limitResult, k_customWeight, k_protectTones,
           k_protectColor, k_protectTolerance, k_protectEffect, k_protectFalloff);
@@ -426,37 +473,55 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
 
       float pickSpillSpLuma = color::GetLuma(pickSpillSp, k_respillMath);
 
-      // normaliza el spill
+      // normalize current spill relative to picked color spill
       spillLumaFull = pickSpillSpLuma == 0.0f ? 0.0f : spillLuma / pickSpillSpLuma;
       spillFull = despillColor4 * spillLumaFull;
-      despilledFull = Vector4(rgb[0], rgb[1], rgb[2], 1.0f) - spillFull;
+      despilledFull = Vector4(rgb[0], rgb[1], rgb[2], 0.0f) - spillFull;
+      spillMatte = pickSpillDespilled[3];
     }
 
-    // calcula el color respill final
-    Vector4 respillRgb4(respillRgb[0], respillRgb[1], respillRgb[2], 1.0f);
-    Vector4 respillColor(k_respillColor[0], k_respillColor[1], k_respillColor[2], 1.0f);
+    // calculate final respill color (replacement color for removed spill)
+    Vector4 respillRgb4(respillRgb[0], respillRgb[1], respillRgb[2], 0.0f);
+    Vector4 respillColor(k_respillColor[0], k_respillColor[1], k_respillColor[2], 0.0f);
     Vector4 respillColorResult = isRespillConnected ? respillRgb4 * respillColor : respillColor;
 
+    // output type: despilled image or spill matte
     if(k_outputType == Constants::OUTPUT_DESPILL) {
-      result = despilledFull +
-               Vector4(spillLumaFull, spillLumaFull, spillLumaFull, 1.0f) * respillColorResult;
+      // output despilled image with respill color added back
+      result = despilledFull + Vector4(spillLumaFull, spillLumaFull, spillLumaFull, spillLumaFull) *
+                                   respillColorResult;
     }
     else {
       result = spillFull;
     }
 
-    // Write RGB channels to the output
+    // determine alpha output value
+    if(!k_outputAlpha) {
+      // pass the original input alpha channel
+      spillMatte = *input_alpha;
+    }
+    else if(!k_invertAlpha) {
+      // output spill amount as alpha channel
+      spillMatte = spillLumaFull;
+    }
+    else {
+      // output inverted spill amount as alpha channel
+      spillMatte = 1 - spillLumaFull;
+    }
+
+    // write alpha channel to specified output channel
+    foreach(z, channels) {
+      if(z == k_outputSpillChannel) {
+        *(row.writable(z) + x0) = clamp(spillMatte, 0.0f, 1.0f);  // output spill alpha
+      }
+    }
+
+    // write RGB channels to output
     for(int i = 0; i < 3; i++) {
       outPixel[i] = result[i];
     }
 
-    // Write spill channel
-    foreach(z, channels) {
-      if(z == k_outputSpillChannel) {
-        *(row.writable(z) + x0) = 1.0f;  // output spill alpha
-      }
-    }
-
+    // move to next pixel
     incrementPointers();
   }
 }

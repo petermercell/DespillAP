@@ -132,6 +132,7 @@ namespace color
   {
     Vector3 hueIn = HueRotate(rgb, hueShift);
     Vector4 despilled(hueIn[0], hueIn[1], hueIn[2], 0.0f);
+    customWeight = (customWeight + 1) / 2;
 
     float limitResult = 0.0f;
     int chans[2];
