@@ -1,3 +1,15 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// This file is a modified version of code from:
+// https://github.com/AuthorityFX/afx-nuke-plugins
+// Originally authored by Ryan P. Wilson, Authority FX, Inc.
+//
+// Modifications for DespillAP plugin:
+// - Renamed variables for improved readability and consistency
+// - Removed CUDA-specific sections
+// - Adjusted to integrate with the DespillAP CPU-based plugin architecture
+
 #include "include/threading.h"
 
 #include <algorithm>
@@ -25,9 +37,9 @@ namespace imgcore
     StopAndJoin();
   }
 
-  /* Se encarga de añadir nuevos hilos de trabajo
-  al grupo de hilos existente (thread_pool),
-  simplemente aumenta la cantidad de hilos */
+  /* Handles adding new worker threads
+  to the existing thread group (thread_pool),
+  simply increases the number of threads */
   void Threader::AddThreads(unsigned int num_threads)
   {
     for(unsigned int t = 0; t < num_threads; ++t) {
@@ -37,130 +49,129 @@ namespace imgcore
 
   void Threader::InitializeThreads(unsigned int requested_threads)
   {
-    // Verifica si hay hilos en ejecución
+    // Check if threads are running
     if(running) {
-      StopAndJoin();  // Se detiene y espera a que termine la tarea actual
+      StopAndJoin();  // Stop and wait for current task to finish
     }
 
-    // Crea un objeto work
-    // Este objeto impide que el servicio se detenga cuando no hay tareas pendientes
+    // Create a work object
+    // This object prevents the service from stopping when there are no pending tasks
     work_ptr.reset(new boost::asio::io_service::work(io_service));
 
-    // Si el servicio está detenido, lo reinicia con .reset()
+    // If the service is stopped, restart it with .reset()
     if(io_service.stopped()) {
       io_service.reset();
     }
 
-    // Se marca el estado en "ejecucion"
+    // Mark the state as "running"
     running = true;
 
-    // obtiene el numero de nucleos/hilos disponibles del CPU
+    // Get the number of available CPU cores/threads
     unsigned int available_threads = boost::thread::hardware_concurrency();
 
-    // si no, se utiliza todos los hilos disponibles
-    num_threads =
-        requested_threads > 0
-            ? std::min<unsigned int>(requested_threads, available_threads)
-            : available_threads;
+    // If not specified, use all available threads
+    num_threads = requested_threads > 0
+                      ? std::min<unsigned int>(requested_threads, available_threads)
+                      : available_threads;
 
-    // inicia un bucle para crear hilos
+    // Start a loop to create threads
     for(unsigned int t = 0; t < num_threads; ++t) {
-      // para cada hilo, utiliza 'thread_pool.create_thread()' para añadirlo a la pool
-      // cada hilo ejecutará el método 'Worker()' de la clase Threader
+      // For each thread, use 'thread_pool.create_thread()' to add it to the pool
+      // Each thread will execute the 'Worker()' method of the Threader class
       thread_pool.create_thread(boost::bind(&Threader::Worker, this));
     }
   }
 
-  /* Esta funcion es la que ejecuta cada hilo creado en el pool de hilos
-  define el comportamiento de los hilos y su ciclo de vida */
+  /* This function is executed by each thread created in the thread pool
+  defines the behavior of threads and their lifecycle */
   void Threader::Worker()
   {
-    // Mantiene el hilo activo mientras la variable 'running' sea verdadera
+    // Keep the thread active while the 'running' variable is true
     while(running) {
-      io_service.run();  // ejecutará tareas pendientes en el io_service
+      io_service.run();  // Execute pending tasks in the io_service
 
-      // Cuando 'run()' termina, el hilo notifica con este evento
-      // Util para que los otros hilos sepan que el hilo ha terminado su tarea
+      // When 'run()' finishes, the thread notifies with this event
+      // Useful for other threads to know that this thread has finished its task
       exited_run.notify_one();
 
-      // Adquiere un bloqueo exclusivo del mutex
-      // para evitar condiciones de carrera
+      // Acquire an exclusive lock on the mutex
+      // to avoid race conditions
       boost::unique_lock<boost::mutex> lock(mutex);
 
-      // Verifica si el hilo deberia seguir ejecutandose
-      // Si el servicio esta detendido 'io_service.stoppped()'
+      // Check if the thread should continue running
+      // If the service is stopped 'io_service.stopped()'
       while(running && io_service.stopped()) {
-        // Si el servicio está detenido, espera a que se añadan nuevas tareas
+        // If the service is stopped, wait for new tasks to be added
         io_service_ready.wait(lock);
       }
     }
   }
 
-  /* Esta funcion permite esperar a que se completen todas las tareas
-  pendientes en el pool de hilos */
+  /* This function allows waiting for all pending tasks
+  in the thread pool to complete */
   void Threader::Wait()
   {
-    // Elimina el objeto work que mantiene el io_service activo
-    // Cuando no hay un objeto work, 'io_service.run()' retorna
-    // una vez que se completen todas las tareas pendientes
+    // Remove the work object that keeps the io_service active
+    // When there is no work object, 'io_service.run()' returns
+    // once all pending tasks are completed
     work_ptr.reset();
 
-    // Crea un mutex temporal y un bloqueo para utilizarlos
-    // con la variable de condicion
+    // Create a temporary mutex and lock to use them
+    // with the condition variable
     boost::mutex dummy_mutex;
     boost::unique_lock<boost::mutex> dummy_lock(dummy_mutex);
 
-    // Espera hasta que el servicio se detenga
+    // Wait until the service stops
     while(!io_service.stopped()) {
-      // Utiliza para suspender la ejecucion del hilo llamante
-      // hasta que un hilo trabajador notifique que ha terminado su tarea
-      // Este paso es crucial; el hilo que llama a 'Wait()'
-      // se bloque hasta que todos los hilos hayan procesado
-      // sus tareas pendientes
+      // Used to suspend execution of the calling thread
+      // until a worker thread notifies that it has finished its task
+      // This step is crucial; the thread calling 'Wait()'
+      // blocks until all threads have processed
+      // their pending tasks
       exited_run.wait(dummy_lock);
     }
 
-    // Cuando todos los hilos han terminado su trabajo
-    // Verifica si el servicio debe de seguir ejecutandose
+    // When all threads have finished their work
+    // Check if the service should continue running
     if(running) {
-      // Si debe continuar
-      // Protege la modificacion del servicio
+      // If it should continue
+      // Protect the service modification
       boost::lock_guard<boost::mutex> lock(mutex);
-      // Crea un nuevo objeto work para mantener el servicio activo
+      // Create a new work object to keep the service active
       work_ptr.reset(new boost::asio::io_service::work(io_service));
-      // Reinicia el servicio
-      // Para permitir nuevas tareas
+      // Restart the service
+      // to allow new tasks
       io_service.reset();
     }
     io_service_ready.notify_all();
   }
 
-  /* Se encarga de finalizar todas las operaciones
-  y liberar los recursos asociados a los hilos */
+  /* Handles terminating all operations
+  and freeing resources associated with threads */
   void Threader::StopAndJoin()
   {
-    // bloque de ambito
-    // que controla la duracion del bloqueo
-    // del mutex
+    // Scope block
+    // that controls the duration of the mutex
+    // lock
     {
-      // protege la modificacion de la variable 'running'
+      // Protect modification of the 'running' variable
       boost::lock_guard<boost::mutex> lock(mutex);
-      running = false;  // indica a todos los hilos que deben de terminar
+      running = false;  // Tell all threads they should terminate
     }
-    Wait();                  // elimina el objeto work
-    thread_pool.join_all();  // espera a que todos los hilos terminen
+    Wait();                  // Remove the work object
+    thread_pool.join_all();  // Wait for all threads to finish
   }
 
-  /* Esta funcion es el punto de entrada para agregar nuevas tareas al pool,
-  permite añadir trabajo que será ejecutado por alguno de los hilos.
-  Para cualquier tipo de funcion que cumpla con la firma especificada*/
+  /* This function is the entry point for adding new tasks to the pool,
+  allows adding work that will be executed by one of the threads.
+  For any type of function that matches the specified signature*/
   void Threader::AddWork(boost::function<void()> function)
   {
-    /* El método post() de Boost.Asio garantiza que la función será ejecutada 
-    de forma asíncrona por uno de los hilos que estén ejecutando io_service.run()
-    Esta operación es no bloqueante: 
-    la función AddWork retorna inmediatamente 
-    sin esperar a que la tarea sea ejecutada */
+    /* The post() method of Boost.Asio guarantees that the function will be executed 
+    asynchronously by one of the threads running io_service.run()
+    This operation is non-blocking: 
+    the AddWork function returns immediately 
+    without waiting for the task to be executed */
     io_service.post(function);
   }
 

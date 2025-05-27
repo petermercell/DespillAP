@@ -1,12 +1,5 @@
 set(TARGET_PLUGIN "DespillAP")
 
-# CUDA
-find_package(CUDA REQUIRED)
-set(CMAKE_CUDA_STANDARD 11)
-message("CUDA_TOOLKIT_ROOT_DIR: ${CUDA_TOOLKIT_ROOT_DIR}")
-message("CUDA_INCLUDE_DIRS: ${CUDA_INCLUDE_DIRS}")
-message("CUDA_LIBRARIES: ${CUDA_LIBRARIES}")
-
 # Boost
 set(Boost_USE_STATIC_LIBS    ON)
 set(Boost_USE_MULTITHREADED  ON)
@@ -30,7 +23,6 @@ add_library(NukePlugins::${TARGET_PLUGIN} ALIAS ${TARGET_PLUGIN})
 # Includes
 target_include_directories(${TARGET_PLUGIN}
     PRIVATE
-        ${CUDA_INCLUDE_DIRS}
         ${Boost_INCLUDE_DIRS}
         ${NUKE_INCLUDE_DIRS}
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -50,13 +42,6 @@ if (WIN32)
     )
 endif()
 
-# CUDA Properties
-set_target_properties(${TARGET_PLUGIN} PROPERTIES
-    CUDA_RESOLVE_DEVICE_SYMBOLS   ON
-    CUDA_SEPARABLE_COMPILATION    ON
-    PREFIX                         ""      # para que no se llame libDespillAP.dll
-)
-
 # Link Nuke, Boost y CUDA
 target_link_libraries(${TARGET_PLUGIN}
     PRIVATE
@@ -64,7 +49,6 @@ target_link_libraries(${TARGET_PLUGIN}
         ${Boost_FILESYSTEM_LIBRARY}
         ${Boost_SYSTEM_LIBRARY}
         ${Boost_THREAD_LIBRARY}
-        ${CUDA_LIBRARIES}
 )
 
 # Post-build
@@ -74,17 +58,6 @@ add_custom_command(TARGET ${TARGET_PLUGIN} POST_BUILD
         $<TARGET_FILE:${TARGET_PLUGIN}>
         "${PLUGIN_OUTPUT_DIR}/"
 )
-
-# Copy CUDA DLLs
-if (MSVC)
-    file(GLOB CUDA_DLLS "${CUDA_TOOLKIT_ROOT_DIR}/bin/cudart64*.dll")
-    if (CUDA_DLLS)
-        add_custom_command(TARGET ${TARGET_PLUGIN} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy ${CUDA_DLLS} "${PLUGIN_OUTPUT_DIR}/"
-            COMMAND_EXPAND_LISTS
-        )
-    endif()
-endif()
 
 # Install
 install(TARGETS ${TARGET_PLUGIN} DESTINATION .)

@@ -1,3 +1,16 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// This file is a modified version of code from:
+// https://github.com/AuthorityFX/afx-nuke-plugins
+// Originally authored by Ryan P. Wilson, Authority FX, Inc.
+//
+// Modifications for DespillAP plugin:
+// - Namespace renamed to a generic form
+// - Removed CUDA-specific logic
+// - Adjusted for CPU-only use
+// - Integrated threading logic with DespillAP's design
+
 #ifndef ATTRIBUTE_H
 #define ATTRIBUTE_H
 
@@ -198,10 +211,10 @@ namespace imgcore
     }
 
     // ---- ITERATOR ACCESS FOR MANUAL TRAVERSAL ----
-    ptr_list_it GetBegin() { return array_.begin(); }  // Iterator to beginning
-    ptr_list_it GetEnd() { return array_.end(); }      // Iterator to end
+    ptr_list_it GetBegin() { return array_.begin(); }     // Iterator to beginning
+    ptr_list_it GetEnd() { return array_.end(); }         // Iterator to end
     ptr_list_rit GetRBegin() { return array_.rbegin(); }  // Reverse iterator to beginning
-    ptr_list_rit GetREnd() { return array_.rend(); }  // Reverse iterator to end
+    ptr_list_rit GetREnd() { return array_.rend(); }      // Reverse iterator to end
 
    private:
     // ---- COMPILE-TIME VALIDATION ----

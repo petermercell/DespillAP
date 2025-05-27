@@ -77,30 +77,40 @@ class DespillAPIop : public Iop
   const char *node_help() const { return HELP; }
 
  private:
-  //knobs
+  // spill knobs
   bool k_absMode;
   int k_colorType;
-  int k_outputType;
   int k_despillMath;
-  int k_respillMath;
   float k_spillPick[3];
-  float k_respillColor[3];
-  bool k_outputAlpha;
-  bool k_invertAlpha;
   float k_customWeight;
+
+  // hue knobs
   float k_hueOffset;
   float k_hueLimit;
-  bool k_protectTones;
-  bool k_protectPrev;
-  float k_protectColor[3];
-  float k_protectTolerance;
-  float k_protectFalloff;
-  float k_protectEffect;
-  bool k_invertLimitMask;
   Channel k_limitChannel;
-  Channel k_outputSpillChannel;
   Knob *limitChannel_knob;
   Knob *invertLimitMask_knob;
+  bool k_invertLimitMask;
+
+  // protect tones knobs
+  float k_protectColor[3];
+  bool k_protectTones;
+  float k_protectTolerance;
+  float k_protectFalloff;
+  bool k_protectPrev;
+  float k_protectEffect;
+
+  // respill knobs
+  float k_respillColor[3];
+  int k_respillMath;
+  float k_blackPoint;
+  float k_whitePoint;
+
+  // output knobs
+  int k_outputType;
+  bool k_outputAlpha;
+  bool k_invertAlpha;
+  Channel k_outputSpillChannel;
 
   // connected inputs
   bool isSourceConnected;
@@ -108,7 +118,7 @@ class DespillAPIop : public Iop
   bool isColorConnected;
   bool isRespillConnected;
 
-  // internal
+  // internal variables
   float _hueShift;
   int _clr;
   int _usePickedColor;

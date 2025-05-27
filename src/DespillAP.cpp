@@ -49,6 +49,8 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
   k_protectFalloff = 2.0f;
   k_protectEffect = 1.0f;
   k_invertLimitMask = 1;
+  k_blackPoint = 0.0f;
+  k_whitePoint = 1.0f;
 
   isSourceConnected = false;
   isLimitConnected = false;
@@ -61,69 +63,131 @@ DespillAPIop::DespillAPIop(Node *node) : Iop(node)
 void DespillAPIop::knobs(Knob_Callback f)
 {
   Enumeration_knob(f, &k_colorType, Constants::COLOR_TYPES, "color");
+  Tooltip(f,
+          "Select spill color: Red, Green, Blue channels, or use Color Picker. Disabled when Color "
+          "input is connected");
+
   ClearFlags(f, Knob::STARTLINE);
-  Bool_knob(f, &k_absMode, "absoluteMode", "Absolute Mode");
+  Bool_knob(f, &k_absMode, "absolute_mode", "Absolute Mode");
+  Tooltip(
+      f,
+      "Normalize spill relative to picked color intensity. When off, uses raw spill calculation");
 
   Knob *pick_knob = Color_knob(f, k_spillPick, "pick");
   ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
+  Tooltip(f,
+          "Pick specific spill color. Automatically calculates hue shift from red reference. "
+          "Disabled when Color input connected or when using channel buttons");
 
-  Enumeration_knob(f, &k_despillMath, Constants::DESPILL_MATH_TYPES, "despillMath", "math");
-  Float_knob(f, &k_customWeight, "customWeight", "");
+  Enumeration_knob(f, &k_despillMath, Constants::DESPILL_MATH_TYPES, "despill_math", "math");
+  Tooltip(f, "Algorithm for despill calculation. Custom math enables the weight parameter below");
+
+  Float_knob(f, &k_customWeight, IRange(-1, 1), "custom_weigth", "");
   SetFlags(f, Knob::DISABLED);
-  SetRange(f, -1, 1);
+  Tooltip(f, "Custom weight for despill calculation. Only active when Math is set to Custom");
 
   Divider(f, "<b>Hue</b>");
-  Float_knob(f, &k_hueOffset, "hueOffset", "offset");
-  SetRange(f, -30, 30);
-  Float_knob(f, &k_hueLimit, "hueLimit", "limit");
-  SetRange(f, 0, 2);
-  Input_Channel_knob(f, &k_limitChannel, 1, 1, "limitChannel", "mask");
-  Bool_knob(f, &k_invertLimitMask, "invertLimitMask", "invert");
+
+  Float_knob(f, &k_hueOffset, IRange(-30, 30), "hue_offset", "offset");
+  Tooltip(f,
+          "Fine-tune hue angle in degrees. Added to automatic shift from picked color, or used "
+          "directly with channel selection");
+
+  Float_knob(f, &k_hueLimit, IRange(0, 2), "hue_limit", "limit");
+  Tooltip(f,
+          "Maximum despill strength. Multiplied by limit mask if connected, controls how "
+          "aggressive the despill can be");
+
+  Input_Channel_knob(f, &k_limitChannel, 1, 1, "limit_channel", "mask");
+  Tooltip(f,
+          "Channel from Limit input to control despill strength per pixel. White = full strength, "
+          "black = no despill");
+
+  Bool_knob(f, &k_invertLimitMask, "invert_limit_mask", "invert");
   SetFlags(f, Knob::ENDLINE);
-  Bool_knob(f, &k_protectTones, "protectTones", "Protect Tones");
-  Bool_knob(f, &k_protectPrev, "protectPreview", "Preview");
+  Tooltip(f, "Invert limit mask values. Black areas get despill instead of white areas");
+
+  Bool_knob(f, &k_protectTones, "protect_tones", "Protect Tones");
+  Tooltip(f, "Enable protection of specific colors (like skin tones) from being despilled");
+
+  Bool_knob(f, &k_protectPrev, "protect_preview", "Preview");
   SetFlags(f, Knob::DISABLED);
   ClearFlags(f, Knob::STARTLINE);
+  Tooltip(
+      f,
+      "Preview protection matte. Shows protected areas multiplied by protection effect strength");
 
   BeginGroup(f, "Protect Tones");
   SetFlags(f, Knob::CLOSED);
-  Knob *protectColor_knob = Color_knob(f, k_protectColor, "protectColor", "color");
+
+  Knob *protectColor_knob = Color_knob(f, k_protectColor, "protect_color", "color");
   ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
   SetFlags(f, Knob::DISABLED);
+  Tooltip(f,
+          "Reference color to protect from despill (typically skin tone or important foreground "
+          "color)");
 
-  Float_knob(f, &k_protectTolerance, "protectTolerance", "tolerance");
+  Float_knob(f, &k_protectTolerance, IRange(0, 1), "protect_tolerance", "tolerance");
   SetFlags(f, Knob::DISABLED);
-  SetRange(f, 0, 1);
-  Float_knob(f, &k_protectFalloff, "protectFalloff", "falloff");
+  Tooltip(f,
+          "Color similarity threshold for protection. Higher values protect more similar colors");
+
+  Float_knob(f, &k_protectFalloff, IRange(0, 4), "protect_falloff", "falloff");
   SetFlags(f, Knob::DISABLED);
-  SetRange(f, 0, 4);
-  Float_knob(f, &k_protectEffect, "protectEffect", "effect");
+  Tooltip(f, "Softness of protection transition between protected and unprotected areas");
+
+  Float_knob(f, &k_protectEffect, IRange(0, 10), "protect_effect", "effect");
   SetFlags(f, Knob::DISABLED);
-  SetRange(f, 0, 10);
+  Tooltip(f,
+          "Strength of protection effect. In preview mode, shows as multiplication factor for "
+          "protected areas");
+
   EndGroup(f);
 
   Divider(f, "<b>Respill</b>");
-  Enumeration_knob(f, &k_respillMath, Constants::RESPILL_MATH_TYPES, "respillMath", "math");
-  Knob *respillColor_knob = Color_knob(f, k_respillColor, "respillColor", "color");
+
+  Enumeration_knob(f, &k_respillMath, Constants::RESPILL_MATH_TYPES, "respill_math", "math");
+  Tooltip(f, "Algorithm for calculating luminance of spill and respill colors");
+
+  Knob *respillColor_knob = Color_knob(f, k_respillColor, IRange(0, 4), "respill_color", "color");
   ClearFlags(f, Knob::MAGNITUDE | Knob::SLIDER);
-  SetRange(f, 0, 4);
+  Tooltip(
+      f,
+      "Replacement color added where spill was removed. Multiplied by Respill input if connected");
+
+  Float_knob(f, &k_blackPoint, IRange(0, 1), "luma_black", "blackpoint");
+  Tooltip(f, "Lower luminance bound. Pixels below this value are fully clipped to 0.");
+
+  Float_knob(f, &k_whitePoint, IRange(0, 1), "luma_white", "whitepoint");
+  Tooltip(f, "Upper luminance bound. Pixels above this value are fully clipped to 1.");
 
   Divider(f, "<b>Output</b>");
-  Enumeration_knob(f, &k_outputType, Constants::OUTPUT_TYPES, "outputDespill", "output");
-  Bool_knob(f, &k_outputAlpha, "outputAlpha", "Output Spill Alpha");
+
+  Enumeration_knob(f, &k_outputType, Constants::OUTPUT_TYPES, "output_despill", "output");
+  Tooltip(f, "Output: Despilled image with respill color added, or raw spill matte");
+
+  Bool_knob(f, &k_outputAlpha, "output_alpha", "Output Spill Alpha");
   ClearFlags(f, Knob::STARTLINE);
-  Bool_knob(f, &k_invertAlpha, "invertAlpha", "Invert");
+  Tooltip(
+      f, "Generate alpha channel from spill amount. When off, passes through original input alpha");
+
+  Bool_knob(f, &k_invertAlpha, "invert_alpha", "Invert");
   SetFlags(f, Knob::ENDLINE);
-  Input_Channel_knob(f, &k_outputSpillChannel, 1, 1, "outputSpillChannel", "channel");
+  Tooltip(f, "Invert spill alpha: spill areas become transparent (0) instead of opaque (1)");
+
+  Input_Channel_knob(f, &k_outputSpillChannel, 1, 1, "output_spill_channel", "channel");
   SetFlags(f, Knob::ENDLINE);
+  Tooltip(f,
+          "Target channel for spill alpha output. Written as clamped values between 0.0 and 1.0");
+
   Spacer(f, 0);
 }
 
 int DespillAPIop::knob_changed(Knob *k)
 {
-  if(k->is("despillMath")) {
-    Knob *despillMath_knob = k->knob("despillMath");
-    Knob *customWeight_knob = k->knob("customWeight");
+  if(k->is("despill_math")) {
+    Knob *despillMath_knob = k->knob("despill_math");
+    Knob *customWeight_knob = k->knob("custom_weigth");
     if(despillMath_knob->get_value() == 3) {
       customWeight_knob->enable();
     }
@@ -143,13 +207,13 @@ int DespillAPIop::knob_changed(Knob *k)
     return 1;
   }
 
-  if(k->is("protectTones")) {
-    Knob *protectTones_knob = k->knob("protectTones");
-    Knob *protectColor_knob = k->knob("protectColor");
-    Knob *protectTolerance_knob = k->knob("protectTolerance");
-    Knob *protectFalloff_knob = k->knob("protectFalloff");
-    Knob *protectEffect_knob = k->knob("protectEffect");
-    Knob *protectPreview_knob = k->knob("protectPreview");
+  if(k->is("protect_tones")) {
+    Knob *protectTones_knob = k->knob("protect_tones");
+    Knob *protectColor_knob = k->knob("protect_color");
+    Knob *protectTolerance_knob = k->knob("protect_tolerance");
+    Knob *protectFalloff_knob = k->knob("protect_falloff");
+    Knob *protectEffect_knob = k->knob("protect_effect");
+    Knob *protectPreview_knob = k->knob("protect_preview");
     if(protectTones_knob->get_value() == 1) {
       protectColor_knob->enable();
       protectTolerance_knob->enable();
@@ -488,8 +552,9 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     // output type: despilled image or spill matte
     if(k_outputType == Constants::OUTPUT_DESPILL) {
       // output despilled image with respill color added back
-      result = despilledFull + Vector4(spillLumaFull, spillLumaFull, spillLumaFull, spillLumaFull) *
-                                   respillColorResult;
+      float range_luma = color::LumaRange(spillLumaFull, k_blackPoint, k_whitePoint);
+      result =
+          despilledFull + Vector4(range_luma, range_luma, range_luma, 0.0f) * respillColorResult;
     }
     else {
       result = spillFull;

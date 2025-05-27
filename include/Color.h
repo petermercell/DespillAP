@@ -207,6 +207,17 @@ namespace color
     }
     return luma;
   }
+
+  float LumaRange(float spillLuma, float blackPoint = 0.0f, float whitePoint = 1.0f)
+  {
+    if(blackPoint <= 0.0f && whitePoint >= 1.0f) return spillLuma;
+
+    float range = whitePoint - blackPoint;
+    if(range <= 0.0f) return spillLuma;
+
+    float normalized = (spillLuma - blackPoint) / range;
+    return clamp(normalized, 0.0f, 1.0f);
+  }
 }  // namespace color
 
 #endif  // COLOR_H

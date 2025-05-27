@@ -1,27 +1,40 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// This file is a modified version of code from:
+// https://github.com/AuthorityFX/afx-nuke-plugins
+// Originally authored by Ryan P. Wilson, Authority FX, Inc.
+//
+// Modifications for DespillAP plugin:
+// - Namespace renamed to a generic form
+// - Removed CUDA-specific logic
+// - Adjusted for CPU-only use
+// - Integrated threading logic with DespillAP's design
+
 #ifndef IMAGE_H
 #define IMAGE_H
 
 // ========================================================================
-// INCLUDES PARA GESTIÓN DE MEMORIA MULTIPLATAFORMA
+// INCLUDES FOR CROSS-PLATFORM MEMORY MANAGEMENT
 // ========================================================================
 #ifndef _WIN32
-#include <malloc.h>  // Linux/Unix: funciones de memoria alineada
+#include <malloc.h>  // Linux/Unix: aligned memory functions
 #else
-#include <stdlib.h>  // Windows: funciones de memoria estándar
+#include <stdlib.h>  // Windows: standard memory functions
 #endif
 
 // ========================================================================
-// INCLUDES NECESARIOS
+// REQUIRED INCLUDES
 // ========================================================================
-#include <boost/ptr_container/ptr_list.hpp>  // Contenedores inteligentes
-#include <cstdint>                           // Tipos enteros de tamaño fijo
+#include <boost/ptr_container/ptr_list.hpp>  // Smart containers
+#include <cstdint>                           // Fixed-size integer types
 #include <memory>                            // Smart pointers (shared_ptr)
-#include <vector>                            // Contenedor estándar
+#include <vector>                            // Standard container
 
-#include "include/Attribute.h"  // Sistema de atributos
-#include "include/Bounds.h"     // Manejo de regiones rectangulares
-#include "include/Pixel.h"      // Clases para manejar píxeles
-#include "include/Threading.h"  // Utilidades de threading
+#include "include/Attribute.h"  // Attribute system
+#include "include/Bounds.h"     // Rectangular region handling
+#include "include/Pixel.h"      // Classes for pixel handling
+#include "include/Threading.h"  // Threading utilities
 
 struct IppiSize
 {
@@ -32,66 +45,64 @@ struct IppiSize
 namespace imgcore
 {
   // ========================================================================
-  // CLASE TEMPLATE IMAGEBASE<T> - Imagen genérica con tipo de dato T
+  // IMAGEBASE<T> TEMPLATE CLASS - Generic image with data type T
   // ========================================================================
   template <class T>
-  class ImageBase : public AttributeBase  // Hereda sistema de atributos
+  class ImageBase : public AttributeBase  // Inherits attribute system
   {
    public:
-    // ---- CONSTRUCTORES ----
+    // ---- CONSTRUCTORS ----
 
-    // Constructor por defecto: imagen vacía
+    // Default constructor: empty image
     ImageBase<T>() : ptr_(nullptr), pitch_(0), region_(imgcore::Bounds()) {}
 
-    // Constructor con región específica
-    explicit ImageBase<T>(const imgcore::Bounds& region)
-        : ptr_(nullptr), pitch_(0)
+    // Constructor with specific region
+    explicit ImageBase<T>(const imgcore::Bounds& region) : ptr_(nullptr), pitch_(0)
     {
-      Allocate(region);  // Reserva memoria para la región
+      Allocate(region);  // Allocate memory for the region
     }
 
-    // Constructor con ancho y alto
-    ImageBase<T>(unsigned int width, unsigned int height)
-        : ptr_(nullptr), pitch_(0)
+    // Constructor with width and height
+    ImageBase<T>(unsigned int width, unsigned int height) : ptr_(nullptr), pitch_(0)
     {
-      Allocate(width, height);  // Crea región desde dimensiones
+      Allocate(width, height);  // Create region from dimensions
     }
 
-    // Constructor de copia: crea copia profunda
+    // Copy constructor: creates deep copy
     ImageBase<T>(const ImageBase<T>& other) : ptr_(nullptr), pitch_(0)
     {
-      Copy(other);  // Copia todos los datos
+      Copy(other);  // Copy all data
     }
 
-    // Constructor de movimiento: transfiere ownership
+    // Move constructor: transfers ownership
     ImageBase<T>(ImageBase<T>&& other)
         : ptr_(other.ptr_), pitch_(other.pitch_), region_(other.region_)
     {
-      // Resetea el objeto origen para evitar double-delete
+      // Reset source object to avoid double-delete
       other.ptr_ = nullptr;
       other.pitch_ = 0;
       other.region_ = imgcore::Bounds();
     }
 
-    // ---- OPERADORES DE ASIGNACIÓN ----
+    // ---- ASSIGNMENT OPERATORS ----
 
-    // Asignación por copia
+    // Copy assignment
     ImageBase<T>& operator=(const ImageBase<T>& other)
     {
       Copy(other);
       return *this;
     }
 
-    // Asignación por movimiento
+    // Move assignment
     ImageBase<T>& operator=(ImageBase<T>&& other)
     {
-      if(this != &other) {  // Evita auto-asignación
-        Deallocate();       // Libera memoria actual
-        // Transfiere ownership
+      if(this != &other) {  // Avoid self-assignment
+        Deallocate();       // Free current memory
+        // Transfer ownership
         ptr_ = other.ptr_;
         pitch_ = other.pitch_;
         region_ = other.region_;
-        // Resetea origen
+        // Reset source
         other.ptr_ = nullptr;
         other.pitch_ = 0;
         other.region_ = imgcore::Bounds();
@@ -99,51 +110,49 @@ namespace imgcore
       return *this;
     }
 
-    // Destructor: libera memoria automáticamente
+    // Destructor: automatically frees memory
     ~ImageBase<T>() { Deallocate(); }
 
-    // ---- GESTIÓN DE MEMORIA ----
+    // ---- MEMORY MANAGEMENT ----
 
-    // Reserva memoria para imagen de width x height
+    // Allocate memory for width x height image
     void Allocate(unsigned int width, unsigned int height)
     {
       Allocate(imgcore::Bounds(0, 0, width - 1, height - 1));
     }
 
-    // Reserva memoria para región específica
+    // Allocate memory for specific region
     void Allocate(const imgcore::Bounds& region)
     {
-      Deallocate();  // Libera memoria previa
+      Deallocate();  // Free previous memory
       region_ = region;
 
-      // Calcula pitch alineado a 64 bytes para optimización SIMD
+      // Calculate pitch aligned to 64 bytes for SIMD optimization
       pitch_ = (((region_.GetWidth() * sizeof(T) + 63) / 64) * 64);
 
 #ifdef _WIN32
-      // Windows: usa _aligned_malloc para alineación a 64 bytes
-      ptr_ = reinterpret_cast<T*>(
-          _aligned_malloc(64, pitch_ * region_.GetHeight()));
+      // Windows: use _aligned_malloc for 64-byte alignment
+      ptr_ = reinterpret_cast<T*>(_aligned_malloc(64, pitch_ * region_.GetHeight()));
 #else
-      // Linux/Unix: usa aligned_alloc estándar
-      ptr_ =
-          reinterpret_cast<T*>(aligned_alloc(64, pitch_ * region_.GetHeight()));
+      // Linux/Unix: use standard aligned_alloc
+      ptr_ = reinterpret_cast<T*>(aligned_alloc(64, pitch_ * region_.GetHeight()));
 #endif
     }
 
-    // Copia profunda desde otra imagen
+    // Deep copy from another image
     void Copy(const ImageBase<T>& other)
     {
       region_ = other.region_;
-      Allocate(region_);  // Reserva misma región
+      Allocate(region_);  // Allocate same region
 
-      // Copia fila por fila para manejar diferentes pitch
+      // Copy row by row to handle different pitch
       for(int y = region_.y1(); y <= region_.y2(); ++y) {
         memcpy(GetPtr(region_.x1(), y), other.GetPtr(other.region_.x1(), y),
                region_.GetWidth() * sizeof(T));
       }
     }
 
-    // Libera memoria reservada
+    // Free allocated memory
     void Deallocate()
     {
       if(ptr_ != nullptr) {
@@ -152,27 +161,27 @@ namespace imgcore
       }
     }
 
-    // ---- FUNCIONES DE COPIA DE MEMORIA ----
+    // ---- MEMORY COPY FUNCTIONS ----
 
-    // Copia datos HACIA esta imagen desde puntero externo
+    // Copy data TO this image from external pointer
     void MemCpyIn(const T* ptr, std::size_t pitch)
     {
       const T* source_ptr = ptr;
       T* dest_ptr = GetPtr(region_.x1(), region_.y1());
       std::size_t size = region_.GetWidth() * sizeof(T);
 
-      // Copia fila por fila manejando diferentes pitch
+      // Copy row by row handling different pitch
       for(int y = region_.y1(); y <= region_.y2(); ++y) {
         memcpy(dest_ptr, source_ptr, size);
-        // Avanza source_ptr usando su pitch
-        source_ptr = reinterpret_cast<const T*>(
-            (reinterpret_cast<const std::uint8_t*>(source_ptr) + pitch));
-        // Avanza dest_ptr usando nuestro pitch
+        // Advance source_ptr using its pitch
+        source_ptr =
+            reinterpret_cast<const T*>((reinterpret_cast<const std::uint8_t*>(source_ptr) + pitch));
+        // Advance dest_ptr using our pitch
         dest_ptr = this->GetNextRow(dest_ptr);
       }
     }
 
-    // Copia datos hacia región específica
+    // Copy data to specific region
     void MemCpyIn(const T* ptr, std::size_t pitch, imgcore::Bounds region)
     {
       const T* source_ptr = ptr;
@@ -181,32 +190,29 @@ namespace imgcore
 
       for(int y = region.y1(); y <= region.y2(); ++y) {
         memcpy(dest_ptr, source_ptr, size);
-        source_ptr = reinterpret_cast<const T*>(
-            (reinterpret_cast<const std::uint8_t*>(source_ptr) + pitch));
+        source_ptr =
+            reinterpret_cast<const T*>((reinterpret_cast<const std::uint8_t*>(source_ptr) + pitch));
         dest_ptr = this->GetNextRow(dest_ptr);
       }
     }
 
-    // Copia desde otra imagen con región específica
+    // Copy from another image with specific region
     void MemCpyIn(const ImageBase<T>& source_image, imgcore::Bounds region)
     {
-      MemCpyIn(source_image.GetPtr(region.x1(), region.y1()),
-               source_image.GetPitch(), region);
+      MemCpyIn(source_image.GetPtr(region.x1(), region.y1()), source_image.GetPitch(), region);
     }
 
-    // Copia desde otra imagen (región completa)
+    // Copy from another image (full region)
     void MemCpyIn(const ImageBase<T>& source_image)
     {
-      // Calcula intersección entre imágenes para evitar overflow
-      imgcore::Bounds region =
-          source_image.GetBounds().GetIntersection(region_);
-      MemCpyIn(source_image.GetPtr(region.x1(), region.y1()),
-               source_image.GetPitch(), region);
+      // Calculate intersection between images to avoid overflow
+      imgcore::Bounds region = source_image.GetBounds().GetIntersection(region_);
+      MemCpyIn(source_image.GetPtr(region.x1(), region.y1()), source_image.GetPitch(), region);
     }
 
-    // ---- FUNCIONES DE COPIA HACIA AFUERA ----
+    // ---- COPY OUT FUNCTIONS ----
 
-    // Copia DESDE esta imagen hacia puntero externo
+    // Copy FROM this image to external pointer
     void MemCpyOut(T* ptr, std::size_t pitch) const
     {
       T* source_ptr = GetPtr(region_.x1(), region_.y1());
@@ -216,94 +222,85 @@ namespace imgcore
       for(int y = region_.y1(); y <= region_.y2(); ++y) {
         memcpy(dest_ptr, source_ptr, size);
         source_ptr = this->GetNextRow(dest_ptr);
-        dest_ptr = reinterpret_cast<T*>(
-            (reinterpret_cast<std::uint8_t*>(dest_ptr) + pitch));
+        dest_ptr = reinterpret_cast<T*>((reinterpret_cast<std::uint8_t*>(dest_ptr) + pitch));
       }
     }
 
-    // Copia región específica hacia puntero externo
+    // Copy specific region to external pointer
     void MemCpyOut(T* ptr, std::size_t pitch, imgcore::Bounds region) const
     {
       T* source_ptr = GetPtr(region.x1(), region.y1());
       T* dest_ptr = ptr;
       std::size_t size = region.GetWidth() * sizeof(T);
 
-      for(int y = region.y1(); y <= region.y2(); ++y) {
+      for(int y = region.y1(); y <= region_.y2(); ++y) {
         memcpy(dest_ptr, source_ptr, size);
         source_ptr = this->GetNextRow(dest_ptr);
-        dest_ptr = reinterpret_cast<T*>(
-            (reinterpret_cast<std::uint8_t*>(dest_ptr) + pitch));
+        dest_ptr = reinterpret_cast<T*>((reinterpret_cast<std::uint8_t*>(dest_ptr) + pitch));
       }
     }
 
-    // Copia hacia otra imagen con región específica
+    // Copy to another image with specific region
     void MemCpyOut(const ImageBase<T>& dest_image, imgcore::Bounds region) const
     {
-      MemCpyOut(dest_image.GetPtr(region.x1(), region.y1()),
-                dest_image.GetPitch(), region);
+      MemCpyOut(dest_image.GetPtr(region.x1(), region.y1()), dest_image.GetPitch(), region);
     }
 
-    // Copia hacia otra imagen (región completa)
+    // Copy to another image (full region)
     void MemCpyOut(const ImageBase<T>& dest_image) const
     {
       imgcore::Bounds region = dest_image.GetBounds();
-      MemCpyOut(dest_image.GetPtr(region.x1(), region.y1()),
-                dest_image.GetPitch(), region);
+      MemCpyOut(dest_image.GetPtr(region.x1(), region.y1()), dest_image.GetPitch(), region);
     }
 
-    // ---- ACCESO A PUNTEROS Y NAVEGACIÓN ----
+    // ---- POINTER ACCESS AND NAVIGATION ----
 
-    // Obtiene puntero base de la imagen
+    // Get base pointer of the image
     T* GetPtr() const { return ptr_; }
 
-    // Obtiene puntero a coordenada específica (x,y)
+    // Get pointer to specific coordinate (x,y)
     T* GetPtr(int x, int y) const
     {
       return reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(ptr_) +
-                                  (y - region_.y1()) * pitch_ +  // Offset fila
-                                  (x - region_.x1()) *
-                                      sizeof(T));  // Offset columna
+                                  (y - region_.y1()) * pitch_ +     // Row offset
+                                  (x - region_.x1()) * sizeof(T));  // Column offset
     }
 
-    // Obtiene puntero con clampeo automático a bounds
+    // Get pointer with automatic clamping to bounds
     T* GetPtrBnds(int x, int y) const
     {
       return reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(ptr_) +
                                   (region_.ClampY(y) - region_.y1()) * pitch_ +
-                                  (region_.ClampX(x) - region_.x1()) *
-                                      sizeof(T));
+                                  (region_.ClampX(x) - region_.x1()) * sizeof(T));
     }
 
-    // Avanza puntero a la siguiente fila
+    // Advance pointer to next row
     T* GetNextRow(T* ptr) const
     {
-      return reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(ptr) +
-                                  pitch_);
+      return reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(ptr) + pitch_);
     }
 
-    // Versión const del avance de fila
+    // Const version of row advance
     const T* GetNextRow(const T* ptr) const
     {
-      return reinterpret_cast<const T*>(
-          reinterpret_cast<const std::uint8_t*>(ptr) + pitch_);
+      return reinterpret_cast<const T*>(reinterpret_cast<const std::uint8_t*>(ptr) + pitch_);
     }
 
-    // Retrocede puntero a la fila anterior
+    // Move pointer back to previous row
     T* GetPreviousRow(T* ptr) const
     {
-      return reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(ptr) -
-                                  pitch_);
+      return reinterpret_cast<T*>(reinterpret_cast<std::uint8_t*>(ptr) - pitch_);
     }
 
-    // ---- GETTERS DE PROPIEDADES ----
+    // ---- PROPERTY GETTERS ----
 
-    // Obtiene el pitch (bytes por fila)
+    // Get the pitch (bytes per row)
     std::size_t GetPitch() const { return pitch_; }
 
-    // Obtiene la región/bounds de la imagen
+    // Get the region/bounds of the image
     imgcore::Bounds GetBounds() const { return region_; }
 
-    // Verifica si la imagen tiene memoria asignada
+    // Check if the image has allocated memory
     bool IsAllocated() const
     {
       if(ptr_ != nullptr) {
@@ -314,53 +311,49 @@ namespace imgcore
       }
     }
 
-    // Obtiene tamaño compatible con Intel IPP
+    // Get size compatible with Intel IPP
     IppiSize GetSize() const
     {
-      IppiSize size = {static_cast<int>(region_.GetWidth()),
-                       static_cast<int>(region_.GetHeight())};
+      IppiSize size = {static_cast<int>(region_.GetWidth()), static_cast<int>(region_.GetHeight())};
       return size;
     }
 
    private:
-    T* ptr_;                  // Puntero a los datos de la imagen
-    std::size_t pitch_;       // Bytes por fila (incluyendo padding)
-    imgcore::Bounds region_;  // Región/límites de la imagen
+    T* ptr_;                  // Pointer to image data
+    std::size_t pitch_;       // Bytes per row (including padding)
+    imgcore::Bounds region_;  // Region/bounds of the image
   };
 
   // ========================================================================
-  // TYPEDEF PARA IMAGEN DE FLOTANTES
+  // TYPEDEF FOR FLOAT IMAGES
   // ========================================================================
-  typedef ImageBase<float> Image;  // Alias común para imágenes de float
+  typedef ImageBase<float> Image;  // Common alias for float images
 
   // ========================================================================
-  // CLASE IMAGELAYER - Maneja imagen multi-canal (RGB, RGBA, etc.)
+  // IMAGELAYER CLASS - Handles multi-channel image (RGB, RGBA, etc.)
   // ========================================================================
   class ImageLayer
   {
    public:
-    // Añade nuevo canal con región específica
+    // Add new channel with specific region
     void AddImage(const imgcore::Bounds& region)
     {
       channels_.push_back(std::shared_ptr<Image>(new Image(region)));
     }
 
-    // Añade canal desde shared_ptr existente
-    void AddImage(const std::shared_ptr<Image>& image_ptr)
-    {
-      channels_.push_back(image_ptr);
-    }
+    // Add channel from existing shared_ptr
+    void AddImage(const std::shared_ptr<Image>& image_ptr) { channels_.push_back(image_ptr); }
 
-    // Mueve canal (transfer ownership)
+    // Move channel (transfer ownership)
     void MoveImage(const std::shared_ptr<Image>& image_ptr)
     {
       channels_.push_back(boost::move(image_ptr));
     }
 
-    // Operador [] para acceso directo a canal
+    // Operator [] for direct channel access
     Image* operator[](int channel) const { return GetChannel(channel); }
 
-    // Obtiene puntero a canal específico con validación
+    // Get pointer to specific channel with validation
     Image* GetChannel(int channel) const
     {
       if(static_cast<unsigned int>(channel) > channels_.size() - 1) {
@@ -369,13 +362,12 @@ namespace imgcore
       return channels_[channel].get();
     }
 
-    // Obtiene pixel de solo lectura en coordenada (x,y)
+    // Get read-only pixel at coordinate (x,y)
     imgcore::Pixel<const float> GetPixel(int x, int y) const
     {
-      imgcore::Pixel<const float> pixel(
-          static_cast<unsigned int>(channels_.size()));
+      imgcore::Pixel<const float> pixel(static_cast<unsigned int>(channels_.size()));
 
-      // Configura puntero para cada canal
+      // Set up pointer for each channel
       for(unsigned int i = 0; i < channels_.size(); ++i) {
         const float* ptr = channels_[i].get()->GetPtr(x, y);
         pixel.SetPtr(ptr, i);
@@ -383,12 +375,12 @@ namespace imgcore
       return pixel;
     }
 
-    // Obtiene pixel escribible en coordenada (x,y)
+    // Get writable pixel at coordinate (x,y)
     imgcore::Pixel<float> GetWritePixel(int x, int y) const
     {
       imgcore::Pixel<float> pixel(static_cast<unsigned int>(channels_.size()));
 
-      // Configura puntero escribible para cada canal
+      // Set up writable pointer for each channel
       for(unsigned int i = 0; i < channels_.size(); ++i) {
         float* ptr = channels_[i].get()->GetPtr(x, y);
         pixel.SetPtr(ptr, i);
@@ -396,24 +388,21 @@ namespace imgcore
       return pixel;
     }
 
-    // Retorna número de canales
+    // Return number of channels
     void ChannelCount() const { channels_.size(); }
 
    private:
-    std::vector<std::shared_ptr<Image> > channels_;  // Vector de canales
+    std::vector<std::shared_ptr<Image> > channels_;  // Vector of channels
   };
 
   // ========================================================================
-  // CLASE IMAGEARRAY - Array de imágenes con sistema de atributos
+  // IMAGEARRAY CLASS - Array of images with attribute system
   // ========================================================================
   class ImageArray : public imgcore::Array<ImageBase<float> >
   {
    public:
-    // Añade nueva imagen con región específica
-    void Add(const imgcore::Bounds& region)
-    {
-      this->array_.push_back(new Image(region));
-    }
+    // Add new image with specific region
+    void Add(const imgcore::Bounds& region) { this->array_.push_back(new Image(region)); }
   };
 }  // namespace imgcore
 

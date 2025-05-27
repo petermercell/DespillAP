@@ -1,52 +1,65 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// This file is a modified version of code from:
+// https://github.com/AuthorityFX/afx-nuke-plugins
+// Originally authored by Ryan P. Wilson, Authority FX, Inc.
+//
+// Modifications for DespillAP plugin:
+// - Namespace renamed to a generic form
+// - Removed CUDA-specific logic
+// - Adjusted for CPU-only use
+// - Integrated threading logic with DespillAP's design
+
 #ifndef PIXEL_H
 #define PIXEL_H
 
 namespace imgcore
 {
   // ========================================================================
-  // CLASE PackedPixel - Para navegación eficiente en memoria contigua
+  // PackedPixel CLASS - For efficient navigation in contiguous memory
   // ========================================================================
   template <class T>
   class PackedPixel
   {
    public:
-    // Constructor básico: solo puntero, stride=0 (memoria contigua)
+    // Basic constructor: only pointer, stride=0 (contiguous memory)
     explicit PackedPixel(T* ptr) : ptr_(ptr), stride_(0) {}
 
-    // Constructor con stride: para saltar elementos (ej: RGB -> solo R)
+    // Constructor with stride: to skip elements (e.g.: RGB -> only R)
     PackedPixel(T* ptr, size_t stride) : ptr_(ptr), stride_(stride) {}
 
-    // Constructor de copia: copia solo el puntero (shallow copy)
+    // Copy constructor: copies only the pointer (shallow copy)
     PackedPixel(const PackedPixel& other) { ptr_ = other.ptr_; }
 
-    // Operador de asignación
+    // Assignment operator
     PackedPixel& operator=(const PackedPixel& other)
     {
       ptr_ = other.ptr_;
       return *this;
     }
 
-    // ---- OPERADORES PARA COMPORTARSE COMO UN PUNTERO ----
+    // ---- OPERATORS TO BEHAVE LIKE A POINTER ----
 
-    // Desreferencia: obtiene el valor apuntado
+    // Dereference: get the pointed value
     T& operator*() { return *ptr_; }
 
-    // Asignación directa de puntero
+    // Direct pointer assignment
     void operator=(T* ptr) { ptr_ = ptr; }
 
-    // Operador flecha: acceso a miembros si T es struct/class
+    // Arrow operator: member access if T is struct/class
     T* operator->() { return ptr_; }
 
-    // ---- OPERADORES DE INCREMENTO/DECREMENTO CON STRIDE ----
+    // ---- INCREMENT/DECREMENT OPERATORS WITH STRIDE ----
 
-    // Pre-incremento: avanza usando stride y devuelve nuevo puntero
+    // Pre-increment: advance using stride and return new pointer
     T* operator++()
     {
       ptr_ += stride_;
       return ptr_;
     }
 
-    // Post-incremento: avanza pero devuelve puntero anterior
+    // Post-increment: advance but return previous pointer
     T* operator++(int)
     {
       T* old = ptr_;
@@ -54,7 +67,7 @@ namespace imgcore
       return old;
     }
 
-    // Suma con asignación: avanza N posiciones
+    // Add assignment: advance N positions
     T* operator+=(const size_t& stride)
     {
       T* old = ptr_;
@@ -62,14 +75,14 @@ namespace imgcore
       return old;
     }
 
-    // Pre-decremento: retrocede usando stride
+    // Pre-decrement: move back using stride
     T* operator--()
     {
       ptr_ -= stride_;
       return ptr_;
     }
 
-    // Post-decremento: retrocede pero devuelve puntero anterior
+    // Post-decrement: move back but return previous pointer
     T* operator--(int)
     {
       T* old = ptr_;
@@ -78,96 +91,96 @@ namespace imgcore
     }
 
    private:
-    T* ptr_;         // Puntero actual a los datos
-    size_t stride_;  // Cantidad de elementos a saltar en cada incremento
+    T* ptr_;         // Current pointer to data
+    size_t stride_;  // Number of elements to skip on each increment
   };
 
   // ========================================================================
-  // CLASE Pixel - Para manejar múltiples canales de un pixel
+  // Pixel CLASS - For handling multiple channels of a pixel
   // ========================================================================
   template <class T>
   class Pixel
   {
    public:
-    // Constructor por defecto: crea pixel RGB (3 canales)
+    // Default constructor: creates RGB pixel (3 channels)
     Pixel() : pointers_(nullptr) { Allocate_(3); }
 
-    // Constructor con tamaño específico (ej: RGBA=4, Grayscale=1)
+    // Constructor with specific size (e.g.: RGBA=4, Grayscale=1)
     explicit Pixel(unsigned int size) : pointers_(nullptr) { Allocate_(size); }
 
-    // Constructor de copia
+    // Copy constructor
     Pixel(const Pixel& other) { CopyPixel_(other); }
 
-    // Operador de asignación
+    // Assignment operator
     Pixel& operator=(const Pixel& other)
     {
       CopyPixel_(other);
       return *this;
     }
 
-    // Destructor: libera memoria
+    // Destructor: frees memory
     ~Pixel() { Dispose_(); }
 
-    // ---- MÉTODOS PÚBLICOS PARA NAVEGACIÓN Y ACCESO ----
+    // ---- PUBLIC METHODS FOR NAVIGATION AND ACCESS ----
 
-    // Avanza todos los punteros al siguiente pixel
+    // Advance all pointers to next pixel
     void NextPixel()
     {
       for(unsigned int i = 0; i < size_; ++i) {
         if(pointers_ != nullptr) {
-          pointers_[i]++;  // Incrementa cada canal
+          pointers_[i]++;  // Increment each channel
         }
       }
     }
 
-    // Post-incremento: llama a NextPixel()
+    // Post-increment: calls NextPixel()
     void operator++(int) { NextPixel(); }
 
-    // Acceso a canal por índice: devuelve referencia al valor
+    // Channel access by index: returns reference to value
     T& operator[](unsigned int index) { return *pointers_[index]; }
 
-    // Establece puntero para un canal específico
+    // Set pointer for specific channel
     void SetPtr(T* ptr, unsigned int index) { pointers_[index] = ptr; }
 
-    // Establece valor para un canal específico
+    // Set value for specific channel
     void SetVal(T val, unsigned int index) { *pointers_[index] = val; }
 
-    // Obtiene puntero de un canal
+    // Get pointer of a channel
     T* GetPtr(unsigned int index) const { return pointers_[index]; }
 
-    // Obtiene valor de un canal
+    // Get value of a channel
     T GetVal(unsigned int index) const { return *pointers_[index]; }
 
-    // Obtiene número de canales
+    // Get number of channels
     unsigned int GetSize() const { return size_; }
 
    private:
-    T** pointers_;       // Array de punteros (uno por canal)
-    unsigned int size_;  // Número de canales
+    T** pointers_;       // Array of pointers (one per channel)
+    unsigned int size_;  // Number of channels
 
-    // ---- MÉTODOS PRIVADOS DE GESTIÓN DE MEMORIA ----
+    // ---- PRIVATE MEMORY MANAGEMENT METHODS ----
 
-    // Reserva memoria para el array de punteros
+    // Allocate memory for pointer array
     void Allocate_(unsigned int size)
     {
-      Dispose_();  // Libera memoria previa
+      Dispose_();  // Free previous memory
       size_ = size;
-      pointers_ = new T*[size_];  // Crea array de punteros
+      pointers_ = new T*[size_];  // Create pointer array
       for(unsigned int x = 0; x < size_; ++x) {
-        pointers_[x] = nullptr;  // Inicializa a nullptr
+        pointers_[x] = nullptr;  // Initialize to nullptr
       }
     }
 
-    // Copia desde otro pixel (shallow copy de punteros)
+    // Copy from another pixel (shallow copy of pointers)
     void CopyPixel_(const Pixel& other)
     {
       Allocate_(other.size_);
       for(unsigned int i = 0; i < size_; ++i) {
-        pointers_[i] = other.pointers_[i];  // Copia punteros, no datos
+        pointers_[i] = other.pointers_[i];  // Copy pointers, not data
       }
     }
 
-    // Libera memoria del array de punteros
+    // Free memory of pointer array
     void Dispose_()
     {
       if(pointers_ != nullptr) {
