@@ -82,7 +82,7 @@ void DespillAPIop::knobs(Knob_Callback f)
   Enumeration_knob(f, &k_despillMath, Constants::DESPILL_MATH_TYPES, "despill_math", "math");
   Tooltip(f, "Algorithm for despill calculation. Custom math enables the weight parameter below");
 
-  Float_knob(f, &k_customWeight, IRange(-1, 1), "custom_weigth", "");
+  Float_knob(f, &k_customWeight, IRange(-1, 1), "custom_weight", "");
   SetFlags(f, Knob::DISABLED);
   Tooltip(f, "Custom weight for despill calculation. Only active when Math is set to Custom");
 
@@ -187,7 +187,7 @@ int DespillAPIop::knob_changed(Knob *k)
 {
   if(k->is("despill_math")) {
     Knob *despillMath_knob = k->knob("despill_math");
-    Knob *customWeight_knob = k->knob("custom_weigth");
+    Knob *customWeight_knob = k->knob("custom_weight");
     if(despillMath_knob->get_value() == 3) {
       customWeight_knob->enable();
     }
@@ -355,7 +355,7 @@ void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, in
 
   // request limit matte if its connected to input 'Limit'
   if(input(inputLimit) != nullptr) {
-    input(inputLimit)->request(Mask_All, count);
+    input(inputLimit)->request(input(inputLimit)->info().box(), Mask_All, count);
   };
 
   // request color reference if its connected to input 'Color'
