@@ -149,14 +149,14 @@ tasks:
             # Create Linux ZIP if .so files exist
             if [ -d "$linuxPath" ] && [ -n "$(find "$linuxPath" -name '*.so' -print -quit)" ]; then
               zipName="{{.PROJECT_NAME}}-$nukeVersion-Linux.zip"
-              (cd "$linuxPath" && zip -r "$(pwd)/../../release/$zipName" .)
+              zip -r "release/$zipName" "$linuxPath"
               echo "✅ Created release/$zipName"
             fi
             
             # Create Windows ZIP if .dll files exist
             if [ -d "$windowsPath" ] && [ -n "$(find "$windowsPath" -name '*.dll' -print -quit)" ]; then
               zipName="{{.PROJECT_NAME}}-$nukeVersion-Windows.zip"
-              (cd "$windowsPath" && zip -r "$(pwd)/../../release/$zipName" .)
+              zip -r "release/$zipName" "$windowsPath"
               echo "✅ Created release/$zipName"
             fi
           fi
