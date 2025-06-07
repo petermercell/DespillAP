@@ -510,18 +510,18 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
       for(int i = 0; i < 3; i++) {
         *outPtr[i] = rgb[i] * clamp(rawDespilled.w * k_protectEffect, 0.0f, 1.0f);
       }
-      // move to next pixel
+      // move to next pixel channel
       incrementPointers();
       continue;
     }
 
+    // calculate spill amount (difference between rgb and raw despilled)
     Vector3 spillVec = {
         rgb[0] - rawDespilled.x,
         rgb[1] - rawDespilled.y,
         rgb[2] - rawDespilled.z,
     };
 
-    // calculate spill amount (difference between original and despilled)
     float spillLuma = color::GetLuma(spillVec, k_respillMath);
 
     // process key generation and normalization
@@ -603,7 +603,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
       *outPtr[i] = result[i];
     }
 
-    // move to next pixel
+    // move to next pixel channel
     incrementPointers();
   }
 }
