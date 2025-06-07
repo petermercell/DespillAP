@@ -186,6 +186,7 @@ int DespillAPIop::knob_changed(Knob *k)
   if(k->is("despill_math")) {
     Knob *despillMath_knob = k->knob("despill_math");
     Knob *customWeight_knob = k->knob("custom_weight");
+
     if(despillMath_knob->get_value() == 3) {
       customWeight_knob->enable();
     }
@@ -196,7 +197,7 @@ int DespillAPIop::knob_changed(Knob *k)
   }
 
   if(k->is("color")) {
-    if(knob("color")->get_value() != Constants::COLOR_PICK) {
+    if(knob("color")->get_value() != 3) {
       knob("pick")->disable();
     }
     else {
@@ -212,6 +213,7 @@ int DespillAPIop::knob_changed(Knob *k)
     Knob *protectFalloff_knob = k->knob("protect_falloff");
     Knob *protectEffect_knob = k->knob("protect_effect");
     Knob *protectPreview_knob = k->knob("protect_preview");
+
     if(protectTones_knob->get_value() == 1) {
       protectColor_knob->enable();
       protectTolerance_knob->enable();
@@ -268,13 +270,15 @@ void DespillAPIop::set_input(int i, Op *inputOp, int input, int offset)
       break;
   }
 
-  if(isColorConnected) {
-    knob("pick")->disable();
-    knob("color")->disable();
+  if(!isColorConnected) {
+    knob("color")->enable();
+    if(knob("color")->get_value() == 3) {
+      knob("pick")->enable();
+    }
   }
   else {
-    knob("pick")->enable();
-    knob("color")->enable();
+    knob("pick")->disable();
+    knob("color")->disable();
   }
 }
 
@@ -352,6 +356,7 @@ void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, in
   input(inputSource)->request(input(inputSource)->info().box(), requestedChannels, Mask_RGB);
 
   // request limit matte if its connected to input 'Limit'
+  // take only what fits from the Op format, based on the input limit.
   if(input(inputLimit) != nullptr) {
     input(inputLimit)->request(input(inputLimit)->info().format(), Mask_All, count);
   };
@@ -469,7 +474,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
 
     // determine despill color and hue shift
     if(isColorConnected) {
-      // use color from connected input for automatic color detection
+      // use color from connected input for atm color detection
       despillColor = colorRgb;
       Vector3 v1 = color::VectorToPlane(despillColor);
       Vector3 v2 = color::VectorToPlane(Vector3(1.0f, 0.0f, 0.0f));

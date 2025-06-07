@@ -4,9 +4,7 @@
 # https://github.com/gillesvink/NukeDockerBuild
 # to build nuke plugins in a dockerized environment.
 #
-# thanks to @gillesvink for making this build system publicly available.
-# although the builds are executed locally, this setup provides a clean
-# and consistent environment for compiling Nuke plugins.
+# big thanks to @gillesvink for making this repo publicly available.
 # -----------------------------------------------------------------------------
 
 version: "3"
