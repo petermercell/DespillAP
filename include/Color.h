@@ -13,7 +13,7 @@ namespace nuke = DD::Image;
 
 inline float magnitude(const Vector3 v)
 {
-  return std::sqrtf(v.dot(v));
+  return std::sqrt(v.dot(v));
 }
 
 inline float cosAngleBetween(const Vector3 a, const Vector3 b)
@@ -72,9 +72,9 @@ namespace color
       return rgb;
     }
 
-    float cosA = std::cosf(angle * M_PI_F / 180.0f);
-    float sinA = std::sinf(angle * M_PI_F / 180.0f);
-    float sqrt3 = std::sqrtf(3.0f);
+    float cosA = std::cos(angle * M_PI_F / 180.0f);
+    float sinA = std::sin(angle * M_PI_F / 180.0f);
+    float sqrt3 = std::sqrt(3.0f);
     float common = (rgb.x + rgb.y + rgb.z) * (1.0f - cosA) / 3.0f;
 
     hue[0] = common + rgb.x * cosA + (-rgb.y / sqrt3 + rgb.z / sqrt3) * sinA;
@@ -102,7 +102,7 @@ namespace color
     float mag1 = v1.dot(v1);
     float mag2 = v2.dot(v2);
 
-    float angle = std::acosf(v1.dot(v2) / std::sqrtf(mag1 * mag2));
+    float angle = std::acos(v1.dot(v2) / std::sqrt(mag1 * mag2));
 
     Vector3 crs = v1.cross(v2);
 
@@ -124,7 +124,6 @@ namespace color
     float limitResult = 0.0f;
     int chans[2];
 
-    // Determina que canales usar
     if(_clr == Constants::COLOR_RED) {
       chans[0] = Constants::COLOR_GREEN;
       chans[1] = Constants::COLOR_BLUE;
@@ -138,7 +137,6 @@ namespace color
       chans[1] = Constants::COLOR_GREEN;
     }
 
-    // Aplica el tipo de despill
     if(despillMath == Constants::DESPILL_AVERAGE) {
       limitResult = (despilled[chans[0]] + despilled[chans[1]]) / 2;
     }
@@ -152,7 +150,6 @@ namespace color
       limitResult = despilled[chans[0]] * customWeight + despilled[chans[1]] * (1 - customWeight);
     }
 
-    // Aplica proteccion de tonos
     float protectResult;
     bool isProtectDifferent = (protectColor[0] != protectColor[1]) ||
                               (protectColor[0] != protectColor[2]) ||
@@ -162,11 +159,10 @@ namespace color
       float cosProtectAngle;
       cosProtectAngle = cosAngleBetween(rgb, protectColor);
       cosProtectAngle = clamp(cosProtectAngle, 0.0f, 1.0f);
-      protectResult = std::powf(cosProtectAngle, 1 / std::powf(protectTolerance, protectFalloff));
+      protectResult = std::pow(cosProtectAngle, 1 / std::pow(protectTolerance, protectFalloff));
       limitResult = limitResult * (1 + protectResult * protectEffect);
     }
 
-    // aplica el despill y la rotacion de matiz de salida
     for(int c = 0; c < 3; c++) {
       despilled[c] = c == _clr ? MIN(despilled[c], limitResult * limit) : despilled[c];
     }
@@ -181,7 +177,7 @@ namespace color
     return despilled;
   }
 
-  float GetLuma(const Vector4 rgb, int math)
+  float GetLuma(const Vector3 rgb, int math)
   {
     float luma;
     switch(math) {

@@ -353,7 +353,7 @@ void DespillAPIop::_request(int x, int y, int r, int t, ChannelMask channels, in
 
   // request limit matte if its connected to input 'Limit'
   if(input(inputLimit) != nullptr) {
-    input(inputLimit)->request(input(inputLimit)->info().box(), Mask_All, count);
+    input(inputLimit)->request(input(inputLimit)->info().format(), Mask_All, count);
   };
 
   // request color reference if its connected to input 'Color'
@@ -410,7 +410,6 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
   Vector3 rgb;
   Vector3 colorRgb;
   Vector3 respillRgb;
-  Vector3 spillLuma;
 
   // pixel pointers for efficient multichannel processing from afx tools
   std::array<const float *, 3> inPtr;
@@ -497,65 +496,77 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     float limitResult = isLimitConnected ? k_hueLimit * invertInputLimit : k_hueLimit;
 
     // perform limit operation
-    Vector4 despilled = color::Despill(rgb, hueShift, _clr, k_despillMath, limitResult,
-                                       k_customWeight, k_protectTones, k_protectColor,
-                                       k_protectTolerance, k_protectEffect, k_protectFalloff);
+    Vector4 rawDespilled = color::Despill(rgb, hueShift, _clr, k_despillMath, limitResult,
+                                          k_customWeight, k_protectTones, k_protectColor,
+                                          k_protectTolerance, k_protectEffect, k_protectFalloff);
 
     // case: if tones are protected, output protection matte
     if(k_protectPrev && k_protectTones) {
       for(int i = 0; i < 3; i++) {
-        *outPtr[i] = rgb[i] * clamp(despilled[3] * k_protectEffect, 0.0f, 1.0f);
+        *outPtr[i] = rgb[i] * clamp(rawDespilled.w * k_protectEffect, 0.0f, 1.0f);
       }
       // move to next pixel
       incrementPointers();
       continue;
     }
 
+    Vector3 spillVec = {
+        rgb[0] - rawDespilled.x,
+        rgb[1] - rawDespilled.y,
+        rgb[2] - rawDespilled.z,
+    };
+
     // calculate spill amount (difference between original and despilled)
-    Vector4 spill = Vector4(rgb[0], rgb[1], rgb[2], 1.0f) - despilled;
-    float spillLuma = color::GetLuma(spill, k_respillMath);
+    float spillLuma = color::GetLuma(spillVec, k_respillMath);
 
     // process key generation and normalization
-    Vector4 result;
-    Vector4 despilledFull, spillFull;
+    Vector3 despilledRGB;
+    Vector4 spillFull;
     float spillLumaFull;
 
     if(!k_absMode) {
       // relative mode: use calculated values
-      despilledFull = despilled;
-      spillFull = spill;
+      despilledRGB = {rawDespilled.x, rawDespilled.y, rawDespilled.z};
+      spillFull = Vector4(spillVec.x, spillVec.y, spillVec.z, 0.0f);
       spillLumaFull = spillLuma;
     }
     else {
       // absolute mode: normalize spill relative to pícked color
-      Vector4 despillColor4 = Vector4(despillColor.x, despillColor.y, despillColor.z, 0.0f);
-
       // calculate how much the pícked color would be despilled
-      Vector4 pickSpillDespilled = color::Despill(
+      Vector4 pickDespilled = color::Despill(
           despillColor, hueShift, _clr, k_despillMath, limitResult, k_customWeight, k_protectTones,
           k_protectColor, k_protectTolerance, k_protectEffect, k_protectFalloff);
-      Vector4 pickSpillSp = despillColor4 - pickSpillDespilled;
 
-      float pickSpillSpLuma = color::GetLuma(pickSpillSp, k_respillMath);
+      Vector3 pickSpill = {
+          despillColor.x - pickDespilled.x,
+          despillColor.y - pickDespilled.y,
+          despillColor.z - pickDespilled.z,
+      };
+
+      float pickSpillLuma = color::GetLuma(pickSpill, k_respillMath);
 
       // normalize current spill relative to picked color spill
-      spillLumaFull = pickSpillSpLuma == 0.0f ? 0.0f : spillLuma / pickSpillSpLuma;
-      spillFull = despillColor4 * spillLumaFull;
-      despilledFull = Vector4(rgb[0], rgb[1], rgb[2], 0.0f) - spillFull;
-      spillMatte = pickSpillDespilled[3];
+      spillLumaFull = (pickSpillLuma == 0.0f) ? 0.0f : spillLuma / pickSpillLuma;
+      Vector3 scaledSpill = despillColor * spillLumaFull;
+      spillFull = Vector4(scaledSpill.x, scaledSpill.y, scaledSpill.z, 0.0f);
+      despilledRGB = {rgb[0] - scaledSpill.x, rgb[1] - scaledSpill.y, rgb[2] - scaledSpill.z};
+      spillMatte = pickDespilled.w;
     }
 
     // calculate final respill color (replacement color for removed spill)
-    Vector4 respillRgb4(respillRgb[0], respillRgb[1], respillRgb[2], 0.0f);
-    Vector4 respillColor(k_respillColor[0], k_respillColor[1], k_respillColor[2], 0.0f);
-    Vector4 respillColorResult = isRespillConnected ? respillRgb4 * respillColor : respillColor;
+    Vector3 respillBase = {k_respillColor[0], k_respillColor[1], k_respillColor[2]};
+    Vector3 respillInput = respillRgb;
+    Vector3 finalRespill =
+        isRespillConnected ? Vector3(respillInput.x, respillInput.y, respillInput.z) : respillBase;
 
     // output type: despilled image or spill matte
+    Vector4 result;
     if(k_outputType == Constants::OUTPUT_DESPILL) {
       // output despilled image with respill color added back
-      float range_luma = color::LumaRange(spillLumaFull, k_blackPoint, k_whitePoint);
-      result =
-          despilledFull + Vector4(range_luma, range_luma, range_luma, 0.0f) * respillColorResult;
+      float rangeLuma = color::LumaRange(spillLumaFull, k_blackPoint, k_whitePoint);
+      result = {despilledRGB.x + finalRespill.x * rangeLuma,
+                despilledRGB.y + finalRespill.y * rangeLuma,
+                despilledRGB.z + finalRespill.z * rangeLuma, 0.0f};
     }
     else {
       result = spillFull;
@@ -572,7 +583,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     }
     else {
       // output inverted spill amount as alpha channel
-      spillMatte = 1 - spillLumaFull;
+      spillMatte = 1.0f - spillLumaFull;
     }
 
     // write alpha channel to specified output channel
