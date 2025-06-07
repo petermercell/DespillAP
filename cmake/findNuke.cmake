@@ -22,7 +22,7 @@
 #  NUKE_VERSION_RELEASE
 #
 
-set(_nuke_KNOWN_VERSIONS 12.0 12.1 12.2 13.0 13.1 13.2 14.0)
+set(_nuke_KNOWN_VERSIONS 12.0 12.1 12.2 13.0 13.1 13.2 14.0 15.0 15.1)
 set(_nuke_TEST_VERSIONS) # List of Nuke-style strings (e.g. "7.0v4")
 
 
@@ -94,58 +94,136 @@ else()
     endif()
 
     if(APPLE)
-        set(_nuke_TEMPLATE_PATH "/Applications/Nuke<VERSION>/Nuke<VERSION>.app/Contents/MacOS")
+        set(_nuke_TEMPLATE_PATHS "/Applications/Nuke<VERSION>/Nuke<VERSION>.app/Contents/MacOS")
     elseif(WIN32)
-        set(_nuke_TEMPLATE_PATH "C:/Program Files/Nuke<VERSION>")
+        set(_nuke_TEMPLATE_PATHS "C:/Program Files/Nuke<VERSION>")
     else() # Linux
-        set(_nuke_TEMPLATE_PATH "/usr/local/Nuke<VERSION>")
+        # Standard system paths
+        set(_nuke_TEMPLATE_PATHS "/usr/local/Nuke<VERSION>")
+        
+        # Dev containers and Docker installations (version-agnostic)
+        list(APPEND _nuke_TEMPLATE_PATHS "/usr/local/nuke_install")
+        list(APPEND _nuke_TEMPLATE_PATHS "/usr/local/nuke")
+        list(APPEND _nuke_TEMPLATE_PATHS "/opt/nuke_install")
+        
+        # CentOS7 and enterprise Linux common paths
+        list(APPEND _nuke_TEMPLATE_PATHS "/opt/Nuke<VERSION>")
+        list(APPEND _nuke_TEMPLATE_PATHS "/opt/foundry/nuke<VERSION>")
+        list(APPEND _nuke_TEMPLATE_PATHS "/opt/foundry/Nuke<VERSION>")
+        
+        # User home directory installations (common in CentOS7)
+        if(DEFINED ENV{HOME})
+            list(APPEND _nuke_TEMPLATE_PATHS "$ENV{HOME}/Nuke<VERSION>")
+            list(APPEND _nuke_TEMPLATE_PATHS "$ENV{HOME}/nuke<VERSION>")
+            list(APPEND _nuke_TEMPLATE_PATHS "$ENV{HOME}/foundry/Nuke<VERSION>")
+            list(APPEND _nuke_TEMPLATE_PATHS "$ENV{HOME}/foundry/nuke<VERSION>")
+            list(APPEND _nuke_TEMPLATE_PATHS "$ENV{HOME}/software/Nuke<VERSION>")
+            list(APPEND _nuke_TEMPLATE_PATHS "$ENV{HOME}/apps/Nuke<VERSION>")
+            list(APPEND _nuke_TEMPLATE_PATHS "$ENV{HOME}/nuke_install")
+        endif()
+        
+        # Additional common enterprise paths
+        list(APPEND _nuke_TEMPLATE_PATHS "/shared/software/Nuke<VERSION>")
+        list(APPEND _nuke_TEMPLATE_PATHS "/tools/Nuke<VERSION>")
+        list(APPEND _nuke_TEMPLATE_PATHS "/pipeline/software/Nuke<VERSION>")
+        list(APPEND _nuke_TEMPLATE_PATHS "/shared/nuke_install")
     endif()
 
     foreach(_test_version ${_nuke_TEST_VERSIONS})
-        string(REPLACE "<VERSION>" ${_test_version} _test_path ${_nuke_TEMPLATE_PATH})
-        list(APPEND _nuke_TEST_PATHS ${_test_path})
+        foreach(_template_path ${_nuke_TEMPLATE_PATHS})
+            string(REPLACE "<VERSION>" ${_test_version} _test_path ${_template_path})
+            list(APPEND _nuke_TEST_PATHS ${_test_path})
+        endforeach()
     endforeach()
 endif()
 
 # Base search around DDImage, since its name is unversioned
 find_library(NUKE_DDIMAGE_LIBRARY DDImage
     PATHS ${_nuke_TEST_PATHS}
+    PATH_SUFFIXES lib lib64 . 
     DOC "Nuke DDImage library path"
     NO_SYSTEM_ENVIRONMENT_PATH)
 
 find_library(NUKE_RIPFRAMEWORK_LIBRARY RIPFramework
     PATHS ${_nuke_TEST_PATHS}
+    PATH_SUFFIXES lib lib64 .
     DOC "Nuke RIPFramework library path"
     NO_SYSTEM_ENVIRONMENT_PATH)
     
 # Sanity-check to avoid a bunch of redundant errors.
 if(NUKE_DDIMAGE_LIBRARY)
-    get_filename_component(NUKE_LIBRARY_DIRS ${NUKE_DDIMAGE_LIBRARY} PATH)
+    get_filename_component(_nuke_lib_dir ${NUKE_DDIMAGE_LIBRARY} DIRECTORY)
+    get_filename_component(NUKE_LIBRARY_DIRS ${_nuke_lib_dir} DIRECTORY)
 
-    find_path(NUKE_INCLUDE_DIRS DDImage/Op.h "${NUKE_LIBRARY_DIRS}/include")
+    find_path(NUKE_INCLUDE_DIRS DDImage/Op.h 
+        PATHS "${NUKE_LIBRARY_DIRS}/include" "${_nuke_lib_dir}/../include"
+        NO_SYSTEM_ENVIRONMENT_PATH)
 
     # Pull version information from header
     # (We could pull the DDImage path apart instead, but this avoids dealing
     # with platform-specific naming.)
-    file(STRINGS "${NUKE_INCLUDE_DIRS}/DDImage/ddImageVersionNumbers.h" _nuke_DDIMAGE_VERSION_H)
-    string(REGEX REPLACE ".*#define kDDImageVersionMajorNum ([0-9]+).*" "\\1"
-        NUKE_VERSION_MAJOR ${_nuke_DDIMAGE_VERSION_H})
-    string(REGEX REPLACE ".*#define kDDImageVersionMinorNum ([0-9]+).*" "\\1"
-        NUKE_VERSION_MINOR ${_nuke_DDIMAGE_VERSION_H})
-    string(REGEX REPLACE ".*#define kDDImageVersionReleaseNum ([0-9]+).*" "\\1"
-        NUKE_VERSION_RELEASE ${_nuke_DDIMAGE_VERSION_H})
+    if(NUKE_INCLUDE_DIRS)
+        file(STRINGS "${NUKE_INCLUDE_DIRS}/DDImage/ddImageVersionNumbers.h" _nuke_DDIMAGE_VERSION_H)
+        string(REGEX REPLACE ".*#define kDDImageVersionMajorNum ([0-9]+).*" "\\1"
+            NUKE_VERSION_MAJOR ${_nuke_DDIMAGE_VERSION_H})
+        string(REGEX REPLACE ".*#define kDDImageVersionMinorNum ([0-9]+).*" "\\1"
+            NUKE_VERSION_MINOR ${_nuke_DDIMAGE_VERSION_H})
+        string(REGEX REPLACE ".*#define kDDImageVersionReleaseNum ([0-9]+).*" "\\1"
+            NUKE_VERSION_RELEASE ${_nuke_DDIMAGE_VERSION_H})
 
-    find_program(NUKE_EXECUTABLE
-        NAMES
-            Nuke
-            "Nuke${NUKE_VERSION_MAJOR}.${NUKE_VERSION_MINOR}"
-            "Nuke${NUKE_VERSION_MAJOR}.${NUKE_VERSION_MINOR}v${NUKE_VERSION_RELEASE}"
-        PATHS ${NUKE_LIBRARY_DIRS}
-        NO_SYSTEM_ENVIRONMENT_PATH
-        DOC "Nuke executable path")
+        find_program(NUKE_EXECUTABLE
+            NAMES
+                Nuke
+                nuke
+                "Nuke${NUKE_VERSION_MAJOR}.${NUKE_VERSION_MINOR}"
+                "Nuke${NUKE_VERSION_MAJOR}.${NUKE_VERSION_MINOR}v${NUKE_VERSION_RELEASE}"
+            PATHS ${NUKE_LIBRARY_DIRS} ${_nuke_lib_dir} ${_nuke_TEST_PATHS}
+            PATH_SUFFIXES bin . usr/bin
+            NO_SYSTEM_ENVIRONMENT_PATH
+            DOC "Nuke executable path")
+    endif()
 endif()
 
-# Finalize search
+# Set the libraries list
+if(NUKE_DDIMAGE_LIBRARY AND NUKE_RIPFRAMEWORK_LIBRARY)
+    set(NUKE_LIBRARIES ${NUKE_DDIMAGE_LIBRARY} ${NUKE_RIPFRAMEWORK_LIBRARY})
+endif()
+
+# Finalize search - Make RIPFramework optional for dev containers
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Nuke DEFAULT_MSG
-    NUKE_DDIMAGE_LIBRARY NUKE_RIPFRAMEWORK_LIBRARY NUKE_INCLUDE_DIRS NUKE_LIBRARY_DIRS NUKE_EXECUTABLE)
+
+# Check if we're in a dev container or minimal installation
+if(NUKE_DDIMAGE_LIBRARY AND NUKE_INCLUDE_DIRS)
+    if(NUKE_RIPFRAMEWORK_LIBRARY AND NUKE_EXECUTABLE)
+        # Full installation
+        find_package_handle_standard_args(Nuke DEFAULT_MSG
+            NUKE_DDIMAGE_LIBRARY NUKE_RIPFRAMEWORK_LIBRARY NUKE_INCLUDE_DIRS NUKE_LIBRARY_DIRS NUKE_EXECUTABLE)
+    elseif(NUKE_RIPFRAMEWORK_LIBRARY)
+        # Missing executable but have libraries
+        find_package_handle_standard_args(Nuke DEFAULT_MSG
+            NUKE_DDIMAGE_LIBRARY NUKE_RIPFRAMEWORK_LIBRARY NUKE_INCLUDE_DIRS NUKE_LIBRARY_DIRS)
+        message(WARNING "Nuke libraries found but executable missing. This may be a dev container or minimal installation.")
+    else()
+        # Missing RIPFramework - try to find it in alternative locations
+        find_library(NUKE_RIPFRAMEWORK_LIBRARY
+            NAMES RIPFramework libRIPFramework.so libRIPFramework.a
+            PATHS ${_nuke_TEST_PATHS} ${NUKE_LIBRARY_DIRS} ${_nuke_lib_dir}
+            PATH_SUFFIXES lib lib64 . plugins
+            NO_SYSTEM_ENVIRONMENT_PATH
+            DOC "Nuke RIPFramework library path")
+        
+        if(NUKE_RIPFRAMEWORK_LIBRARY)
+            find_package_handle_standard_args(Nuke DEFAULT_MSG
+                NUKE_DDIMAGE_LIBRARY NUKE_RIPFRAMEWORK_LIBRARY NUKE_INCLUDE_DIRS NUKE_LIBRARY_DIRS)
+        else()
+            # Minimal installation - DDImage only
+            message(WARNING "RIPFramework library not found. Proceeding with DDImage only - this may be a minimal dev installation.")
+            find_package_handle_standard_args(Nuke DEFAULT_MSG
+                NUKE_DDIMAGE_LIBRARY NUKE_INCLUDE_DIRS NUKE_LIBRARY_DIRS)
+        endif()
+    endif()
+else()
+    # Standard search
+    find_package_handle_standard_args(Nuke DEFAULT_MSG
+        NUKE_DDIMAGE_LIBRARY NUKE_RIPFRAMEWORK_LIBRARY NUKE_INCLUDE_DIRS NUKE_LIBRARY_DIRS NUKE_EXECUTABLE)
+endif()

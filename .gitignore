@@ -11,6 +11,9 @@
 *.dylib
 *.bundle
 
+# build libs
+libs/
+
 # Debug files
 *.gch
 *.pch

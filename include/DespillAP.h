@@ -19,7 +19,6 @@ using namespace DD::Image;
 #include "DDImage/Tile.h"
 #include "DDImage/Vector3.h"
 #include "DDImage/Vector4.h"
-#include "include/Utils.h"
 
 #define HELP                                                                   \
   "DespillAP v1.0\n"                                                           \
@@ -125,10 +124,7 @@ class DespillAPIop : public Iop
   int _returnColor;
   Vector3 normVec;
 
-  imgcore::Bounds requestedBounds, formatBounds, fullFormatBounds;
   float proxyScale_;
-
-  imgcore::Threader threader;
 };
 
 #endif  // DESPILL_AP_H

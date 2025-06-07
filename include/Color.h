@@ -8,7 +8,6 @@
 #include "DDImage/Vector3.h"
 #include "DDImage/Vector4.h"
 #include "include/Constants.h"
-#include "include/Pixel.h"
 
 namespace nuke = DD::Image;
 

@@ -4,15 +4,13 @@
   Copyright (c) 2025 Gonzalo Rojas
   This plugin is free to use, modify, and distribute.
   Provided "as is" without any warranty.
+  imgcore
 */
 
 #include "include/DespillAP.h"
 
-#include "include/Attribute.h"
 #include "include/Color.h"
 #include "include/Constants.h"
-#include "include/Image.h"
-#include "include/Utils.h"
 
 enum inputs {
   inputSource = 0,
@@ -409,51 +407,54 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     limitPtr = limit_matte_row[k_limitChannel] + x;
   }
 
-  // get pointer to input alpha channel for pass-throught
-  const float *input_alpha = row[Chan_Alpha] + x;
-
   Vector3 rgb;
   Vector3 colorRgb;
   Vector3 respillRgb;
   Vector3 spillLuma;
 
   // pixel pointers for efficient multichannel processing from afx tools
-  imgcore::Pixel<const float> colorPixel(3);
-  imgcore::Pixel<const float> respillPixel(3);
-  imgcore::Pixel<const float> inPixel(3);
-  imgcore::Pixel<float> outPixel(3);
+  std::array<const float *, 3> inPtr;
+  std::array<const float *, 3> colorPtr;
+  std::array<const float *, 3> respillPtr;
+  std::array<float *, 3> outPtr;
+
+  // get pointer to input alpha channel for pass-throught
+  const float *input_alpha = row[Chan_Alpha] + x;
 
   // lambda to increment all pixel pointers
   auto incrementPointers = [&]() {
-    inPixel++;
-    outPixel++;
-    input_alpha++;
-    if(input(inputColor) != nullptr) {
-      colorPixel++;
+    for(int i = 0; i < 3; ++i) {
+      ++inPtr[i];
+      ++outPtr[i];
+      if(input(inputColor) != nullptr) {
+        ++colorPtr[i];
+      }
+      if(input(inputRespill) != nullptr) {
+        ++respillPtr[i];
+      }
     }
-    if(input(inputRespill) != nullptr) {
-      respillPixel++;
-    }
+    ++input_alpha;
     if(input(inputLimit) != nullptr) {
-      limitPtr++;
+      ++limitPtr;
     }
   };
 
   // set pixel pointers to point to RGB channels
   for(int i = 0; i < 3; ++i) {
-    inPixel.SetPtr(row[static_cast<nuke::Channel>(i + 1)] + x, i);
-    colorPixel.SetPtr(color_row[static_cast<nuke::Channel>(i + 1)] + x, i);
-    respillPixel.SetPtr(respill_row[static_cast<nuke::Channel>(i + 1)] + x, i);
-    outPixel.SetPtr(row.writable(static_cast<nuke::Channel>(i + 1)) + x, i);
+    auto chan = static_cast<nuke::Channel>(i + 1);
+    inPtr[i] = row[chan] + x;
+    outPtr[i] = row.writable(chan) + x;
+    colorPtr[i] = color_row[chan] + x;
+    respillPtr[i] = respill_row[chan] + x;
   }
 
   // Main pixel loop
   for(int x0 = x; x0 < r; ++x0) {
     // read rgb values from the current pixel
     for(int i = 0; i < 3; i++) {
-      rgb[i] = inPixel.GetVal(i);
-      colorRgb[i] = colorPixel.GetVal(i);
-      respillRgb[i] = respillPixel.GetVal(i);
+      rgb[i] = *inPtr[i];
+      colorRgb[i] = *colorPtr[i];
+      respillRgb[i] = *respillPtr[i];
     }
 
     // early exit if color is unchanged
@@ -503,7 +504,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
     // case: if tones are protected, output protection matte
     if(k_protectPrev && k_protectTones) {
       for(int i = 0; i < 3; i++) {
-        outPixel[i] = rgb[i] * clamp(despilled[3] * k_protectEffect, 0.0f, 1.0f);
+        *outPtr[i] = rgb[i] * clamp(despilled[3] * k_protectEffect, 0.0f, 1.0f);
       }
       // move to next pixel
       incrementPointers();
@@ -583,7 +584,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
 
     // write RGB channels to output
     for(int i = 0; i < 3; i++) {
-      outPixel[i] = result[i];
+      *outPtr[i] = result[i];
     }
 
     // move to next pixel

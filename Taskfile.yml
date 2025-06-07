@@ -1,0 +1,168 @@
+# Taskfile.yml
+# -----------------------------------------------------------------------------
+# This project uses the open-source repository by @gillesvink:
+# https://github.com/gillesvink/NukeDockerBuild
+# to build nuke plugins in a dockerized environment.
+#
+# thanks to @gillesvink for making this build system publicly available.
+# although the builds are executed locally, this setup provides a clean
+# and consistent environment for compiling Nuke plugins.
+# -----------------------------------------------------------------------------
+
+version: "3"
+
+vars:
+  PROJECT_NAME: DespillAP
+  VERSION: v1.0.0
+  # nuke versions to build-all
+  NUKE_VERSIONS: 12.1,12.2,13.0,13.1,13.2,14.0,14.1,15.0
+  OUTPUT_DIR: artifacts
+
+tasks:
+  build-linux:
+    desc: Build Linux version for specific Nuke version
+    vars:
+      NUKE_VERSION: '{{.NUKE_VERSION | default "12.1"}}'
+    cmds:
+      - echo "Building Linux for Nuke {{.NUKE_VERSION}}"
+      # run docker env with nuke installed
+      - docker run --rm -v "{{.ROOT_DIR}}:/nuke_build_directory" nukedockerbuild:{{.NUKE_VERSION}}-linux bash -c "cd /nuke_build_directory && cmake . -DNuke_ROOT=/usr/local/nuke_install -DNUKE_INSTALL_PATH=/usr/local/nuke_install -B build-linux-{{.NUKE_VERSION}} && cmake --build build-linux-{{.NUKE_VERSION}}"
+      
+      # Create organized output directory structure
+      - mkdir -p "{{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Linux"
+      # Copy compiled .so files to artifacts folder
+      - |
+        if [ -d "build-linux-{{.NUKE_VERSION}}/lib" ]; then
+          find "build-linux-{{.NUKE_VERSION}}/lib" -name "*.so" -exec cp {} "{{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Linux/" \;
+          echo "✅ Copied .so files to {{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Linux/"
+        else
+          echo "❌ No lib directory found in build-linux-{{.NUKE_VERSION}}"
+        fi
+      # Clean up temporary build files to save disk space
+      - rm -rf "build-linux-{{.NUKE_VERSION}}"
+      - echo "✅ Linux build completed and cleaned for Nuke {{.NUKE_VERSION}}"
+
+  build-windows:
+    desc: Build Windows version for specific Nuke version
+    vars:
+      NUKE_VERSION: '{{.NUKE_VERSION | default "12.1"}}'
+    cmds:
+      - echo "Building Windows for Nuke {{.NUKE_VERSION}}"
+      # Use Docker with Windows cross-compilation environment, setup MSVC compiler
+      - docker run --rm -v "{{.ROOT_DIR}}:/nuke_build_directory" nukedockerbuild:{{.NUKE_VERSION}}-windows bash -c "cd /nuke_build_directory && rm -rf build-windows-{{.NUKE_VERSION}} && source /opt/msvc/msvcenv-native.sh && cmake . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/opt/msvc/bin/x64/cl -DCMAKE_CXX_COMPILER=/opt/msvc/bin/x64/cl -DCMAKE_LINKER=/opt/msvc/bin/x64/link -DCMAKE_SYSTEM_NAME=Windows -DNuke_ROOT=/usr/local/nuke_install -DNUKE_INSTALL_PATH=/usr/local/nuke_install -B build-windows-{{.NUKE_VERSION}} && cmake --build build-windows-{{.NUKE_VERSION}}"
+      
+      # Create Windows-specific output directory
+      - mkdir -p "{{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Windows"
+      # Copy compiled .dll files, check both Release subfolder and lib folder
+      - |
+        if [ -d "build-windows-{{.NUKE_VERSION}}/lib/Release" ]; then
+          find "build-windows-{{.NUKE_VERSION}}/lib/Release" -name "*.dll" -exec cp {} "{{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Windows/" \;
+          echo "✅ Copied .dll files to {{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Windows/"
+        elif [ -d "build-windows-{{.NUKE_VERSION}}/lib" ]; then
+          find "build-windows-{{.NUKE_VERSION}}/lib" -name "*.dll" -exec cp {} "{{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Windows/" \;
+          echo "✅ Copied .dll files to {{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/Windows/"
+        else
+          echo "❌ No lib directory found in build-windows-{{.NUKE_VERSION}}"
+        fi
+      # Clean up temporary build files
+      - rm -rf "build-windows-{{.NUKE_VERSION}}"
+      - echo "✅ Windows build completed and cleaned for Nuke {{.NUKE_VERSION}}"
+
+  build-all:
+    desc: Build all versions for Linux and Windows
+    cmds:
+      - echo "🚀 Building all Nuke versions..."
+      # Loop through all Nuke versions and build Linux version for each
+      - for: { var: NUKE_VERSIONS, split: "," }
+        task: build-linux
+        vars:
+          NUKE_VERSION: "{{.ITEM}}"
+      # Loop through all Nuke versions and build Windows version for each
+      - for: { var: NUKE_VERSIONS, split: "," }
+        task: build-windows
+        vars:
+          NUKE_VERSION: "{{.ITEM}}"
+      - echo "📦 Final artifacts structure:"
+      # Display complete artifacts directory tree
+      - |
+        if [ -d "{{.OUTPUT_DIR}}" ]; then
+          find "{{.OUTPUT_DIR}}" -type f
+        else
+          echo "No artifacts directory found"
+        fi
+
+  build-single:
+    desc: Build single version (specify NUKE_VERSION=12.1)
+    cmds:
+      - echo "🚀 Building {{.NUKE_VERSION}} for both platforms..."
+      # Build both Linux and Windows for specified Nuke version
+      - task: build-linux
+        vars:
+          NUKE_VERSION: "{{.NUKE_VERSION}}"
+      - task: build-windows
+        vars:
+          NUKE_VERSION: "{{.NUKE_VERSION}}"
+      - echo "📦 Built artifacts:"
+      # Show what was built for this specific version
+      - find "{{.OUTPUT_DIR}}/Nuke{{.NUKE_VERSION}}/" -type f 2>/dev/null || echo "No artifacts found"
+
+  clean:
+    desc: Clean all build and output directories
+    cmds:
+      # Remove all temporary build directories
+      - rm -rf build-*
+      # Remove entire artifacts directory
+      - rm -rf "{{.OUTPUT_DIR}}"
+      - echo "✅ Cleaned all build directories and artifacts"
+
+  clean-builds:
+    desc: Clean only build directories (keep artifacts)
+    cmds:
+      # Only remove temporary build directories, preserve compiled artifacts
+      - rm -rf build-*
+      - echo "✅ Cleaned build directories (kept artifacts)"
+
+  show-artifacts:
+    desc: Show final artifacts
+    cmds:
+      - echo "📦 Final artifacts:"
+      # List all compiled plugin files in artifacts directory
+      - |
+        if [ -d "{{.OUTPUT_DIR}}" ]; then
+          find "{{.OUTPUT_DIR}}" -name "*.so" -o -name "*.dll"
+        else
+          echo "No artifacts found"
+        fi
+
+  package:
+    desc: Create ZIP packages from artifacts
+    cmds:
+      # Clean and create release directory for ZIP files
+      - rm -rf release
+      - mkdir -p release
+      # For each Nuke version, create separate ZIP files for Linux and Windows
+      - |
+        for nukeDir in {{.OUTPUT_DIR}}/Nuke*/; do
+          if [ -d "$nukeDir" ]; then
+            nukeVersion=$(basename "$nukeDir")
+            linuxPath="$nukeDir/Linux"
+            windowsPath="$nukeDir/Windows"
+            
+            # Create Linux ZIP if .so files exist
+            if [ -d "$linuxPath" ] && [ -n "$(find "$linuxPath" -name '*.so' -print -quit)" ]; then
+              zipName="{{.PROJECT_NAME}}-$nukeVersion-Linux.zip"
+              (cd "$linuxPath" && zip -r "$(pwd)/../../release/$zipName" .)
+              echo "✅ Created release/$zipName"
+            fi
+            
+            # Create Windows ZIP if .dll files exist
+            if [ -d "$windowsPath" ] && [ -n "$(find "$windowsPath" -name '*.dll' -print -quit)" ]; then
+              zipName="{{.PROJECT_NAME}}-$nukeVersion-Windows.zip"
+              (cd "$windowsPath" && zip -r "$(pwd)/../../release/$zipName" .)
+              echo "✅ Created release/$zipName"
+            fi
+          fi
+        done
+      - echo "📦 Release packages created in release/"
+      # Show all created ZIP files
+      - ls -la release/ 2>/dev/null || echo "No release files found"
