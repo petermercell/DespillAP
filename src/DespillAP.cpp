@@ -572,6 +572,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
       result = {despilledRGB.x + finalRespill.x * rangeLuma,
                 despilledRGB.y + finalRespill.y * rangeLuma,
                 despilledRGB.z + finalRespill.z * rangeLuma, 0.0f};
+      spillLumaFull = rangeLuma;
     }
     else {
       result = spillFull;
