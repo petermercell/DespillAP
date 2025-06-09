@@ -15,7 +15,7 @@
 # Features
 
 - Select a default color (`Red`, `Green`, `Blue`, or `Pick`), or choose a custom color from the image to remove the spill from the input.
-- `Absolute Mode` normalizes the spill relative to the intensity of the selected color.
+- `Absolute Mode` normalizes the spill relative to the intensity of the selected color. Mostly like a chroma keying algorithm.
 - Despill algorithms include `Average`, `Max`, `Min`, and `Custom`.
 - Hue `offset` adjusts the hue (in degrees) of the precomputed despill, if needed.
 - Hue `limit` controls the intensity of the despill effect on the image. If an alpha is connected to the `Limit` input, the despill strength will be driven by the opacity of that alpha.
@@ -25,5 +25,7 @@
 - Protect `color` selects the reference color to be protected from the despill.
 - Protect `tolerance`, similar to a threshold, expands or narrows the color range to include similar tones.
 - Protect `effect` controls how strongly the selected color is being protected.
-- Respill `math` 
+- Respill `math` includes `Rec 709`, `Ccir 601`, `Rec 2020`, `Average`, and `Max` for calculating the luminance of spill and respill colors.
+- Respill `color` is the color used to replace the selected spill. If the `Respill` input is connected, it will be multiplied by the selected color.
+- Respill `blackpoint` and `whitepoint` were added to control the areas where the calculated luminance matte is affecting the respill.
 
