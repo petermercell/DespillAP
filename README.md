@@ -14,5 +14,7 @@
 
 ## Features
 
-- seleccionar un color por defecto o escoger un color custom de la imagen para remover el despill.
+- Select a default color (`Red`, `Green`, `Blue`, or `Pick`), or choose a custom color from the image to remove the spill from the input.
+- `Absolute Mode`: normalizes the spill relative to the intensity of the selected color.
+- Despill algorithms include `Average`, `Max`, `Min`, and `Custom`.
 
