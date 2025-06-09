@@ -36,7 +36,7 @@ All builds were created locally using Docker, thanks to the open-source project 
 
 Puedes correr todos los builds secuencialmente usando el `Taskfile.yml` incluido en la repo.
 
-```
-Task build-all
+```bash
+task build-all
 ```
 
