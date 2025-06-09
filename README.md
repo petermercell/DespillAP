@@ -15,6 +15,15 @@
 ## Features
 
 - Select a default color (`Red`, `Green`, `Blue`, or `Pick`), or choose a custom color from the image to remove the spill from the input.
-- `Absolute Mode`: normalizes the spill relative to the intensity of the selected color.
+- `Absolute Mode` normalizes the spill relative to the intensity of the selected color.
 - Despill algorithms include `Average`, `Max`, `Min`, and `Custom`.
+- Hue `offset` adjusts the hue (in degrees) of the precomputed despill, if needed.
+- Hue `limit` controls the intensity of the despill effect on the image. If an alpha is connected to the `Limit` input, the despill strength will be driven by the opacity of that alpha.
+- Hue `mask` selects the desired channel from the `Limit` input to apply the limit.
+- `Protect Tones` excludes a specific color in the image from being affected by the despill.
+- Protect `Preview` displays a preview of the area that will be excluded from the despill.
+- Protect `color` selects the reference color to be protected from the despill.
+- Protect `tolerance`, similar to a threshold, expands or narrows the color range to include similar tones.
+- Protect `effect` controls how strongly the selected color is being protected.
+- Respill `math` 
 
