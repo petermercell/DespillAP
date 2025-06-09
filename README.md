@@ -85,3 +85,7 @@ task package
 # License
 
 **DespillAP** is distributed under the MIT License with some restrictions. See the [License](https://github.com/gonzalo476/DespillAP/blob/main/LICENSE.md) for details.
+
+# Maintainers
+
+DespillAP plugin is maintained by Gonzalo Rojas.
