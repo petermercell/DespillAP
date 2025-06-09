@@ -1,10 +1,3 @@
-/*
-  apDespill Plugin for Nuke
-  ------------------------------
-  Copyright (c) 2025 Gonzalo Rojas
-  This plugin is free to use, modify, and distribute.
-  Provided "as is" without any warranty.
-*/
 
 #ifndef DESPILL_AP_H
 #define DESPILL_AP_H
