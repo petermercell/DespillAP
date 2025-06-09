@@ -34,7 +34,7 @@
 All builds were created locally using Docker, thanks to the open-source project **NukeDockerBuild** by **Gilles Vink**.  
 [GitHub – NukeDockerBuild](https://github.com/gillesvink/NukeDockerBuild).
 
-Puedes correr todos los builds secuencialmente usando [Taskfile](https://taskfile.dev/) (`Taskfile.yml`).
+Once you have the image locally—either for Windows or Linux (`nukedockerbuild:12.1-windows` or `nukedockerbuild:12.1-linux` .. )—you can run all builds sequentially using [Taskfile](https://taskfile.dev/) (`Taskfile.yml`).
 
 ```bash
 task build-all
