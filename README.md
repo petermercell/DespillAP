@@ -16,7 +16,7 @@
 
 - Select a default color (`Red`, `Green`, `Blue`, or `Pick`), or choose a custom color from the image to remove the spill from the input.
 - `Absolute Mode` normalizes the spill relative to the intensity of the selected color. Mostly like a chroma keying algorithm.
-- Despill algorithms include `Average`, `Max`, `Min`, and `Custom`.
+- Despill algorithms include `Average`, `Max`, `Min`, and `Custom` weight.
 - Hue `offset` adjusts the hue (in degrees) of the precomputed despill, if needed.
 - Hue `limit` controls the intensity of the despill effect on the image. If an alpha is connected to the `Limit` input, the despill strength will be driven by the opacity of that alpha.
 - Hue `mask` selects the desired channel from the `Limit` input to apply the limit.
@@ -28,4 +28,15 @@
 - Respill `math` includes `Rec 709`, `Ccir 601`, `Rec 2020`, `Average`, and `Max` for calculating the luminance of spill and respill colors.
 - Respill `color` is the color used to replace the selected spill. If the `Respill` input is connected, it will be multiplied by the selected color.
 - Respill `blackpoint` and `whitepoint` were added to control the areas where the calculated luminance matte is affecting the respill.
+
+# Build
+
+All builds were created locally using Docker, thanks to the open-source project **NukeDockerBuild** by **Gilles Vink**.  
+[GitHub – NukeDockerBuild](https://github.com/gillesvink/NukeDockerBuild).
+
+Puedes correr todos los builds secuencialmente usando el `Taskfile.yml` incluido en la repo.
+
+```
+Task build-all
+```
 
