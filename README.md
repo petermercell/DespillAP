@@ -82,5 +82,6 @@ Note: This requires the `zip` utility to be installed. On Linux, you can install
 task package
 ```
 
+# License
 
-
+**DespillAP** is distribuited under the 
