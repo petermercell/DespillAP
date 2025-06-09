@@ -40,3 +40,47 @@ Once you have the image locally—either for Windows or Linux (`nukedockerbuild:
 task build-all
 ```
 
+Or run builds by platform and Nuke version using the format `build-PLATFORM:NUKE_VERSION`:
+
+```bash
+task build-linux:12.1
+```
+
+```bash
+task build-windows:12.1
+```
+
+Or build for both platforms using a specific Nuke version with the format `build-single:NUKE_VERSION`:
+
+```bash
+task build-single:12.1
+```
+
+To clean your output directory after building, use this if a directory named `artifacts` has been created:
+
+```bash
+task clean
+```
+
+To clean only the `build` folders created during the build process—while keeping the `artifacts` directory, which stores the compiled libraries or binaries—use the following:
+
+```bash
+task clean-builds
+```
+
+para mostrar un listado de todos los artifacts o binarios compilados simplemente corre:
+
+```bash
+task show-artifacts
+```
+
+To create `.zip` packages for release, this will generate a separate zip file for each `.so` and `.dll` created, following the naming structure `PluginName-NukeVersion-Platform.zip`.  
+
+Note: This requires the `zip` utility to be installed. On Linux, you can install it using: `sudo apt install zip`.
+
+```bash
+task package
+```
+
+
+
