@@ -28,6 +28,10 @@
 - Respill `math` includes `Rec 709`, `Ccir 601`, `Rec 2020`, `Average`, and `Max` for calculating the luminance of spill and respill colors.
 - Respill `color` is the color used to replace the selected spill. If the `Respill` input is connected, it will be multiplied by the selected color.
 - Respill `blackpoint` and `whitepoint` were added to control the areas where the calculated luminance matte is affecting the respill.
+- Output `output_despill` allows you to choose between the despilled image (`Despill`) or the calculated spill (`Spill`) as the output.
+- Output `Output Spill Alpha` generates an alpha channel based on the calculated spill amount; if disabled, the incoming alpha is passed through unchanged.
+- Output `Invert` inverts the calculated spill alpha.
+- Output `channel` selects the channel where the calculated spill will be output.
 
 # Build
 
