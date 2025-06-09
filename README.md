@@ -12,7 +12,7 @@
   <img width="400" alt="Image" src="https://github.com/user-attachments/assets/b811a4d2-921f-4007-8699-f988f7cbb513">
 </p>
 
-## Features
+# Features
 
 - Select a default color (`Red`, `Green`, `Blue`, or `Pick`), or choose a custom color from the image to remove the spill from the input.
 - `Absolute Mode` normalizes the spill relative to the intensity of the selected color.
