@@ -11,3 +11,8 @@
 <p align="center">
   <img width="400" alt="Image" src="https://github.com/user-attachments/assets/b811a4d2-921f-4007-8699-f988f7cbb513">
 </p>
+
+## Features
+
+- seleccionar un color por defecto o escoger un color custom de la imagen para remover el despill.
+
