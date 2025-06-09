@@ -8,3 +8,6 @@
 
 **DespillAP** allows you to remove the spill of a specific color from the input image, set a limit to control the amount of despill applied, inject the overall color to perform a proper despill, and apply a respill based on the desired background.
 
+<p align="center">
+  <img width="300" alt="Image" src="https://github.com/user-attachments/assets/b811a4d2-921f-4007-8699-f988f7cbb513">
+</p>
