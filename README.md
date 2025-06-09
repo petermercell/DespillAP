@@ -1,4 +1,4 @@
-<div align="center">   <img src="https://github.com/gonzalo476/DespillAP/blob/ab752658f506d239235da68dac40b754588ab6cd/despillap.png" alt="despill" width="200"> </div>
+<div align="center">   <img src="https://github.com/gonzalo476/DespillAP/blob/ab752658f506d239235da68dac40b754588ab6cd/despillap.png" alt="despill" width="300"> </div>
 
 ![Static Badge](https://img.shields.io/badge/Nuke-12.1%20%7C%2012.2%20%7C%2013.0%20%7C%2013.1%20%7C%2013.2%20%7C%2014.0%20%7C%2014.1%20%7C%2015.0%20-brightgreen?style=flat&logo=nuke&logoColor=white&label=nuke) ![Static Badge](https://img.shields.io/badge/supported-brightgreen?style=flat&logo=github&logoColor=white&label=windows) ![Static Badge](https://img.shields.io/badge/supported-brightgreen?style=flat&logo=github&logoColor=white&label=linux)
 
