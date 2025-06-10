@@ -116,8 +116,6 @@ class DespillAPIop : public Iop
   int _usePickedColor;
   int _returnColor;
   Vector3 normVec;
-
-  float proxyScale_;
 };
 
 #endif  // DESPILL_AP_H
