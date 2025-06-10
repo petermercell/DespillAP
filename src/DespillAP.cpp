@@ -408,7 +408,7 @@ void DespillAPIop::ProcessCPU(int y, int x, int r, ChannelMask channels, Row &ro
   Vector3 colorRgb;
   Vector3 respillRgb;
 
-  // pixel pointers for efficient multichannel processing
+  // pixel pointers for multichannel processing
   std::array<const float *, 3> inPtr;
   std::array<const float *, 3> colorPtr;
   std::array<const float *, 3> respillPtr;
