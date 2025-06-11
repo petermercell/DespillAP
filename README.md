@@ -92,8 +92,6 @@ To download the plugin, go to the Releases section and download the latest versi
 
 The more complete way (recommended): once you have the plugin downloaded, go to your `.nuke` folder and create a folder called `DespillAP`. Inside it, create only one file called `menu.py`. Add the following lines:
 
-python
-
 ```python
 import nuke
 
@@ -122,15 +120,11 @@ or in the case of Windows:
 
 To finish, open your `.nuke/init.py` file (if you don't have it, you can create it) and add the following lines:
 
-python
-
 ```python
 nuke.pluginAddPath('DespillAP')
 ```
 
 In case you have different versions installed on your system (i.e., Nuke12.1, Nuke12.2), you can add an exception in your `menu.py` so it doesn't interfere with other versions:
-
-python
 
 ```python
 if nuke.NUKE_VERSION_STRING=="12.1v2":
