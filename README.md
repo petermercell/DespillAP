@@ -119,7 +119,7 @@ To clean only the `build` folders created during the build process—while keepi
 task clean-builds
 ```
 
-para mostrar un listado de todos los artifacts o binarios compilados simplemente corre:
+To display a list of all compiled artifacts or binaries, simply run:
 
 ```bash
 task show-artifacts
