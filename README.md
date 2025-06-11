@@ -33,6 +33,53 @@
 - Output `Invert` inverts the calculated spill alpha.
 - Output `channel` selects the channel where the calculated spill will be output.
 
+# Installing
+
+To download the plugin, go to the Releases section and download the latest version. To use it, the simplest way to get started is by dragging the plugin to your `.nuke` folder and when opening Nuke, select `Other (box icon) > All plugins > Update` and search for 'DespillAP', happy comping!
+
+The more complete way (recommended): once you have the plugin downloaded, go to your `.nuke` folder and create a folder called `DespillAP`. Inside it, create only one file called `menu.py`. Add the following lines:
+
+```python
+import nuke
+
+toolbar = nuke.toolbar("Nodes")
+plugin_menu = toolbar.addMenu("DespillAP")
+plugin_menu.addCommand("Keyer/DespillAP", "nuke.createNode('DespillAP')")
+```
+
+Your Linux folder structure should look like this:
+
+```
+.nuke/
+└── DespillAP/
+    ├── menu.py
+    └── DespillAP.so
+```
+
+or in the case of Windows:
+
+```
+.nuke/
+└── DespillAP/
+    ├── menu.py
+    └── DespillAP.dll
+```
+
+To finish, open your `.nuke/init.py` file (if you don't have it, you can create it) and add the following lines:
+
+```python
+nuke.pluginAddPath('DespillAP')
+```
+
+In case you have different versions installed on your system (i.e., Nuke12.1, Nuke12.2), you can add an exception in your `menu.py` so it doesn't interfere with other versions:
+
+```python
+if nuke.NUKE_VERSION_STRING=="12.1v2":
+    nuke.pluginAddPath('DespillAP')
+```
+
+And that's it! Nuke should load the plugin from the moment you open the program without needing to always press `Update`.
+
 # Build
 
 All builds were created locally using Docker, thanks to the open-source project **NukeDockerBuild** by **Gilles Vink**.  
@@ -85,53 +132,6 @@ Note: This requires the `zip` utility to be installed. On Linux, you can install
 ```bash
 task package
 ```
-
-# Installing
-
-To download the plugin, go to the Releases section and download the latest version. To use it, the simplest way to get started is by dragging the plugin to your `.nuke` folder and when opening Nuke, select `Other (box icon) > All plugins > Update` and search for 'DespillAP', happy comping!
-
-The more complete way (recommended): once you have the plugin downloaded, go to your `.nuke` folder and create a folder called `DespillAP`. Inside it, create only one file called `menu.py`. Add the following lines:
-
-```python
-import nuke
-
-toolbar = nuke.toolbar("Nodes")
-plugin_menu = toolbar.addMenu("DespillAP")
-plugin_menu.addCommand("Keyer/DespillAP", "nuke.createNode('DespillAP')")
-```
-
-Your Linux folder structure should look like this:
-
-```
-.nuke/
-└── DespillAP/
-    ├── menu.py
-    └── DespillAP.so
-```
-
-or in the case of Windows:
-
-```
-.nuke/
-└── DespillAP/
-    ├── menu.py
-    └── DespillAP.dll
-```
-
-To finish, open your `.nuke/init.py` file (if you don't have it, you can create it) and add the following lines:
-
-```python
-nuke.pluginAddPath('DespillAP')
-```
-
-In case you have different versions installed on your system (i.e., Nuke12.1, Nuke12.2), you can add an exception in your `menu.py` so it doesn't interfere with other versions:
-
-```python
-if nuke.NUKE_VERSION_STRING=="12.1v2":
-    nuke.pluginAddPath('DespillAP')
-```
-
-And that's it! Nuke should load the plugin from the moment you open the program without needing to always press `Update`.
 
 # License
 
